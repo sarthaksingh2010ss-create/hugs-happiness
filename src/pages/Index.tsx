@@ -163,14 +163,11 @@ export default function Index() {
       <ChatSidebar
         conversations={conversations}
         activeId={activeId}
-        onSelect={(id) => {
-          setActiveId(id);
-          if (window.innerWidth < 768) setSidebarOpen(false);
-        }}
+        onSelect={(id) => setActiveId(id)}
         onNew={handleNew}
         onDelete={handleDelete}
-        onVoiceCall={() => setShowVoice(true)}
         isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <main className="flex-1 flex flex-col min-w-0">
@@ -209,10 +206,15 @@ export default function Index() {
           <EmptyChat onSuggestion={handleSend} />
         )}
 
-        <ChatInput onSend={handleSend} isLoading={isLoading} />
+        <ChatInput
+          onSend={handleSend}
+          isLoading={isLoading}
+          onVoiceCall={() => { setCallMode("voice"); setShowCall(true); }}
+          onVideoCall={() => { setCallMode("video"); setShowCall(true); }}
+        />
       </main>
 
-      <VoiceCall isOpen={showVoice} onClose={() => setShowVoice(false)} />
+      <VoiceCall isOpen={showCall} onClose={() => setShowCall(false)} mode={callMode} />
     </div>
   );
 }
