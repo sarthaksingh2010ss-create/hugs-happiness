@@ -5,6 +5,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import VoiceCall from "@/components/VoiceCall";
 import EmptyChat from "@/components/EmptyChat";
+import { streamChat } from "@/lib/ai-stream";
 import {
   Conversation,
   Message,
@@ -14,26 +15,6 @@ import {
   generateId,
   generateTitle,
 } from "@/lib/chat-store";
-
-// Simple local AI responses (will be replaced with Lovable Cloud)
-function getLocalResponse(msg: string): string {
-  const lower = msg.toLowerCase();
-  if (lower.includes("hello") || lower.includes("hi") || lower.includes("hlo"))
-    return "Hello! 👋 I'm JSR AI, your powerful assistant. How can I help you today?";
-  if (lower.includes("who are you") || lower.includes("your name"))
-    return "I'm **JSR AI** — a powerful AI assistant built to help you with anything from coding to creative writing. Ask me anything!";
-  if (lower.includes("quantum"))
-    return "**Quantum computing** uses qubits instead of classical bits. Unlike bits (0 or 1), qubits can exist in *superposition* — being both 0 and 1 simultaneously. This allows quantum computers to solve certain problems exponentially faster than classical computers.\n\nKey concepts:\n- **Superposition**: Qubits in multiple states at once\n- **Entanglement**: Linked qubits that affect each other\n- **Quantum gates**: Operations on qubits";
-  if (lower.includes("poem"))
-    return "*Beneath the velvet sky so wide,*\n*A thousand stars begin to hide,*\n*Their whispers echo through the night,*\n*Like diamonds catching cosmic light.*\n\n*The moon, a lantern soft and pale,*\n*Illuminates each dream and tale.*";
-  if (lower.includes("react") || lower.includes("code") || lower.includes("debug"))
-    return "I'd love to help with your code! 🛠️ Here are some common React debugging tips:\n\n1. **Check the console** for error messages\n2. Use `React DevTools` to inspect component state\n3. Add `console.log` in `useEffect` to track renders\n4. Verify your **dependency arrays** in hooks\n\nShare your code and I'll take a closer look!";
-  if (lower.includes("voice"))
-    return "I support **voice calls**! Click the 🎙️ Voice Call button in the sidebar to start a voice conversation. Right now it's a demo — connect to **Lovable Cloud** for full voice AI capabilities.";
-  if (lower.includes("help") || lower.includes("kya kar sakte ho"))
-    return "I can help you with:\n\n- 💬 **Chat**: Ask questions, get answers\n- 🎙️ **Voice Call**: Talk to me directly\n- 📝 **Writing**: Essays, poems, stories\n- 💻 **Coding**: Debug, explain, write code\n- 🧠 **Learning**: Explain complex topics simply\n- 🌐 **Translation**: Translate text\n\nJust ask!";
-  return `That's a great question! Here's what I think about "${msg.slice(0, 50)}${msg.length > 50 ? "..." : ""}":\n\nI'm currently running in **local mode** with limited responses. Connect me to **Lovable Cloud** to unlock my full AI capabilities with real-time streaming responses!\n\nFor now, try asking me about:\n- Quantum computing\n- Poetry\n- React debugging\n- What I can do`;
-}
 
 export default function Index() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -95,6 +76,10 @@ export default function Index() {
         timestamp: Date.now(),
       };
 
+      // Get current messages for context
+      const currentConvo = conversations.find((c) => c.id === convoId);
+      const previousMessages = currentConvo?.messages ?? [];
+
       setConversations((prev) =>
         prev.map((c) =>
           c.id === convoId
@@ -110,27 +95,66 @@ export default function Index() {
 
       setIsLoading(true);
 
-      // Simulate AI delay
-      await new Promise((r) => setTimeout(r, 600 + Math.random() * 800));
+      const aiMsgId = generateId();
+      let assistantContent = "";
 
-      const aiMsg: Message = {
-        id: generateId(),
-        role: "assistant",
-        content: getLocalResponse(content),
-        timestamp: Date.now(),
-      };
-
+      // Create empty assistant message
       setConversations((prev) =>
         prev.map((c) =>
           c.id === convoId
-            ? { ...c, messages: [...c.messages, aiMsg], updatedAt: Date.now() }
+            ? {
+                ...c,
+                messages: [
+                  ...c.messages,
+                  { id: aiMsgId, role: "assistant" as const, content: "", timestamp: Date.now() },
+                ],
+                updatedAt: Date.now(),
+              }
             : c
         )
       );
 
-      setIsLoading(false);
+      try {
+        await streamChat({
+          messages: [
+            ...previousMessages.map((m) => ({ role: m.role, content: m.content })),
+            { role: "user" as const, content },
+          ],
+          onDelta: (chunk) => {
+            assistantContent += chunk;
+            const snap = assistantContent;
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === convoId
+                  ? {
+                      ...c,
+                      messages: c.messages.map((m) =>
+                        m.id === aiMsgId ? { ...m, content: snap } : m
+                      ),
+                    }
+                  : c
+              )
+            );
+          },
+          onDone: () => setIsLoading(false),
+        });
+      } catch (e) {
+        console.error(e);
+        // Remove empty assistant message on error
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === convoId
+              ? {
+                  ...c,
+                  messages: c.messages.filter((m) => m.id !== aiMsgId),
+                }
+              : c
+          )
+        );
+        setIsLoading(false);
+      }
     },
-    [activeId]
+    [activeId, conversations]
   );
 
   return (
@@ -148,9 +172,7 @@ export default function Index() {
         isOpen={sidebarOpen}
       />
 
-      {/* Main */}
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header className="h-12 border-b border-border flex items-center px-3 gap-3 shrink-0">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -163,13 +185,12 @@ export default function Index() {
           </h2>
         </header>
 
-        {/* Messages */}
         {activeConvo && activeConvo.messages.length > 0 ? (
           <div className="flex-1 overflow-y-auto">
             {activeConvo.messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} />
             ))}
-            {isLoading && (
+            {isLoading && activeConvo.messages[activeConvo.messages.length - 1]?.content === "" && (
               <div className="flex gap-3 px-4 py-3 bg-card/50">
                 <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
