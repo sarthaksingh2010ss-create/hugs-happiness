@@ -1,4 +1,4 @@
-import { Sparkles, MessageSquare, Phone, Zap } from "lucide-react";
+import { Sparkles, Code, PenLine, Lightbulb, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface EmptyChatProps {
@@ -6,10 +6,10 @@ interface EmptyChatProps {
 }
 
 const suggestions = [
-  { icon: Zap, text: "Explain quantum computing simply" },
-  { icon: MessageSquare, text: "Write a poem about the stars" },
-  { icon: Sparkles, text: "Help me debug my React code" },
-  { icon: Phone, text: "What can you do with voice?" },
+  { icon: Code, text: "Help me debug my code", color: "text-blue-400" },
+  { icon: PenLine, text: "Write a creative story", color: "text-pink-400" },
+  { icon: Lightbulb, text: "Explain quantum physics", color: "text-amber-400" },
+  { icon: Globe, text: "Translate to Hindi", color: "text-emerald-400" },
 ];
 
 export default function EmptyChat({ onSuggestion }: EmptyChatProps) {
@@ -18,45 +18,52 @@ export default function EmptyChat({ onSuggestion }: EmptyChatProps) {
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.4 }}
-        className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-500 flex items-center justify-center mb-6"
-        style={{ boxShadow: "var(--shadow-glow)" }}
+        transition={{ duration: 0.5, type: "spring" }}
+        className="relative mb-8"
       >
-        <Sparkles size={28} className="text-primary-foreground" />
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary via-purple-500 to-pink-500 flex items-center justify-center"
+          style={{ boxShadow: "var(--shadow-glow)" }}
+        >
+          <Sparkles size={36} className="text-primary-foreground" />
+        </div>
+        {/* Floating ring */}
+        <div className="absolute inset-[-4px] rounded-full border border-primary/20 animate-pulse" />
       </motion.div>
 
       <motion.h2
         initial={{ y: 10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.1 }}
-        className="text-2xl font-heading font-bold text-foreground mb-2"
+        transition={{ delay: 0.15 }}
+        className="text-3xl font-heading font-bold text-foreground mb-2"
       >
-        Hello! I'm JSR AI
+        Hi Sarthak! 👋
       </motion.h2>
       <motion.p
         initial={{ y: 10, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        className="text-muted-foreground text-sm mb-8 text-center max-w-sm"
+        transition={{ delay: 0.25 }}
+        className="text-muted-foreground text-sm mb-10 text-center max-w-sm"
       >
-        Your powerful AI assistant. Ask me anything, or try a suggestion below.
+        How can I help you today? Ask me anything or pick a suggestion.
       </motion.p>
 
       <motion.div
-        initial={{ y: 10, opacity: 0 }}
+        initial={{ y: 15, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md"
+        transition={{ delay: 0.35 }}
+        className="grid grid-cols-2 gap-2.5 w-full max-w-lg px-2"
       >
         {suggestions.map((s, i) => (
-          <button
+          <motion.button
             key={i}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => onSuggestion(s.text)}
-            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-card border border-border hover:border-primary/30 hover:bg-card/80 transition-all text-sm text-left"
+            className="flex flex-col gap-2 p-4 rounded-xl bg-card border border-border hover:border-primary/30 transition-all text-left group"
           >
-            <s.icon size={14} className="text-primary shrink-0" />
-            <span className="text-foreground">{s.text}</span>
-          </button>
+            <s.icon size={18} className={`${s.color} group-hover:scale-110 transition-transform`} />
+            <span className="text-sm text-foreground leading-snug">{s.text}</span>
+          </motion.button>
         ))}
       </motion.div>
     </div>
