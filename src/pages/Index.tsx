@@ -5,6 +5,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import VoiceCall from "@/components/VoiceCall";
 import EmptyChat from "@/components/EmptyChat";
+import { toast } from "@/hooks/use-toast";
 import { streamChat } from "@/lib/ai-stream";
 import {
   Conversation,
@@ -22,6 +23,7 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(false);
   const [showCall, setShowCall] = useState(false);
   const [callMode, setCallMode] = useState<"voice" | "video">("voice");
+  const [callStream, setCallStream] = useState<MediaStream | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -158,6 +160,32 @@ export default function Index() {
     [activeId, conversations]
   );
 
+  const startCall = useCallback(
+    async (mode: "voice" | "video") => {
+      try {
+        const constraints =
+          mode === "video"
+            ? { audio: true, video: { facingMode: "user" } }
+            : { audio: true, video: false };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setCallStream(stream);
+        setCallMode(mode);
+        setShowCall(true);
+      } catch (error) {
+        console.error("Media permission error:", error);
+        toast({
+          variant: "destructive",
+          title: "Permission needed",
+          description: mode === "video"
+            ? "Camera aur microphone allow kijiye to start video call."
+            : "Microphone allow kijiye to start voice call.",
+        });
+      }
+    },
+    []
+  );
+
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       <ChatSidebar
@@ -209,12 +237,20 @@ export default function Index() {
         <ChatInput
           onSend={handleSend}
           isLoading={isLoading}
-          onVoiceCall={() => { setCallMode("voice"); setShowCall(true); }}
-          onVideoCall={() => { setCallMode("video"); setShowCall(true); }}
+          onVoiceCall={() => void startCall("voice")}
+          onVideoCall={() => void startCall("video")}
         />
       </main>
 
-      <VoiceCall isOpen={showCall} onClose={() => setShowCall(false)} mode={callMode} />
+      <VoiceCall
+        isOpen={showCall}
+        onClose={() => {
+          setShowCall(false);
+          setCallStream(null);
+        }}
+        mode={callMode}
+        mediaStream={callStream}
+      />
     </div>
   );
 }
