@@ -20,7 +20,8 @@ export default function Index() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showVoice, setShowVoice] = useState(false);
+  const [showCall, setShowCall] = useState(false);
+  const [callMode, setCallMode] = useState<"voice" | "video">("voice");
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
