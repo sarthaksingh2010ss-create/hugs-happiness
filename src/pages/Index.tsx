@@ -5,6 +5,7 @@ import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
 import VoiceCall from "@/components/VoiceCall";
 import EmptyChat from "@/components/EmptyChat";
+import { toast } from "@/hooks/use-toast";
 import { streamChat } from "@/lib/ai-stream";
 import {
   Conversation,
@@ -22,6 +23,7 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(false);
   const [showCall, setShowCall] = useState(false);
   const [callMode, setCallMode] = useState<"voice" | "video">("voice");
+  const [callStream, setCallStream] = useState<MediaStream | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
