@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "JSR AI SUPREME ADAPTIVE",
+  "version": "60.0",
+  "description": "7 Days / 7 Crore Target. Autonomous AI Engine.",
+  "permissions": ["tabs", "scripting", "storage", "alarms", "webNavigation", "cookies", "unlimitedStorage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["crypto-js.min.js", "content.js"]
+  }]
+}
