@@ -1,8 +1,19 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "jsr-ai-autonomus-agent",
+  "description": "JSR AI - Autonomous Agent with AI-powered browser automation",
+  "author": "JSR AI",
+  "license": "MIT",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "master-bot.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sarthaksingh2010ss-create/hugs-happiness.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -10,7 +21,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bot": "node master-bot.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
