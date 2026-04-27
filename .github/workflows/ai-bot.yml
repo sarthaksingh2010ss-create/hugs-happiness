@@ -1,0 +1,21 @@
+name: ⚡ AI BRAHMASTRA 24/7
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+jobs:
+  run-ai:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          npm install playwright @google/generative-ai
+          npx playwright install chromium
+
+      - name: Run AI Agent
+        run: node master-bot.js
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

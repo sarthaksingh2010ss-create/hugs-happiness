@@ -1,0 +1,20 @@
+{
+      "name": "JSR AI - Autonomous Agent",
+        "short_name": "JSR AI",
+          "description": "7 दिन में 7 करोड़ का AI एजेंट",
+            "start_url": "/",
+              "display": "standalone",
+                "orientation": "portrait",
+                  "theme_color": "#0f0c29",
+                    "background_color": "#0f0c29",
+                      "icons": [
+                            {
+                                      "src": "https://cdn-icons-png.flaticon.com/512/3135/3135715.png",
+                                            "sizes": "512x512",
+                                                  "type": "image/png"
+                            }
+                      ]
+}
+} ]
+}
+  ]
