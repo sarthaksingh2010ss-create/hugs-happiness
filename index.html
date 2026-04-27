@@ -17,62 +17,7 @@
   </head>
 
   <body>
-    <div style="background:#000; color:#0f0; font-family:monospace; padding:30px;">
-      <h2 style="text-shadow: 0 0 10px #0f0;">⚡ JSR AI POWER PANEL</h2>
-      <div style="border:1px solid #0f0; padding:20px; border-radius:10px;">
-        <label>TARGET URL:</label><br>
-        <input id="url" placeholder="https://example.com..." style="width:100%; padding:10px; background:#111; color:#0f0; border:1px solid #0f0; margin:10px 0;" />
-        <label>SECURE PASSWORD:</label><br>
-        <input id="pass" type="password" placeholder="Enter Password" style="width:100%; padding:10px; background:#111; color:#0f0; border:1px solid #0f0; margin:10px 0;" />
-        <button onclick="send()" style="width:100%; padding:15px; background:#0f0; color:#000; font-weight:bold; cursor:pointer; margin-top:10px;">EXECUTE ON CHROME 🚀</button>
-      </div>
-      <div style="margin-top:20px;">
-        <label>LIVE LOGS:</label>
-        <div id="logs" style="background:#050505; color:red; border:1px solid #333; height:120px; overflow:auto; padding:10px; font-size:12px;">System Ready...</div>
-      </div>
-    </div>
-
     <div id="root"></div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script>
-      async function send() {
-        const passValue = document.getElementById('pass').value;
-        const urlValue = document.getElementById('url').value;
-        if (!urlValue) return alert('Error: URL missing!');
-
-        const encrypted = CryptoJS.AES.encrypt(passValue, 'JSR_AI_POWER_999').toString();
-
-        try {
-          const response = await fetch('http://localhost:9999/jsr/send-secure', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: urlValue, payload: encrypted }),
-          });
-
-          if (response.ok) {
-            alert('JSR AI: Command Sent to Bridge! 🚀');
-          } else {
-            alert('Error: Bridge request failed.');
-          }
-        } catch (e) {
-          alert('Error: Termux Python Bridge is not running or blocked!');
-        }
-      }
-
-      setInterval(async () => {
-        try {
-          const res = await fetch('http://localhost:9999/jsr/get-logs');
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            document.getElementById('logs').innerHTML = data.join('<br>');
-          }
-        } catch (e) {
-          // Bridge offline
-        }
-      }, 3000);
-    </script>
-
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
