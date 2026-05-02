@@ -10,6 +10,7 @@ import { streamChat } from "@/lib/ai-stream";
 import {
   Conversation,
   Message,
+  Attachment,
   loadConversations,
   saveConversations,
   createConversation,
@@ -62,7 +63,7 @@ export default function Index() {
   );
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: Attachment[]) => {
       let convoId = activeId;
 
       if (!convoId) {
@@ -77,6 +78,7 @@ export default function Index() {
         role: "user",
         content,
         timestamp: Date.now(),
+        attachments,
       };
 
       // Get current messages for context
@@ -120,8 +122,8 @@ export default function Index() {
       try {
         await streamChat({
           messages: [
-            ...previousMessages.map((m) => ({ role: m.role, content: m.content })),
-            { role: "user" as const, content },
+            ...previousMessages.map((m) => ({ role: m.role, content: m.content, attachments: m.attachments })),
+            { role: "user" as const, content, attachments },
           ],
           onDelta: (chunk) => {
             assistantContent += chunk;
