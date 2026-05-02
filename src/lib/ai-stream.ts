@@ -12,10 +12,12 @@ export type OutgoingMessage = {
 export async function streamChat({
   messages,
   onDelta,
+  onAttachment,
   onDone,
 }: {
   messages: OutgoingMessage[];
   onDelta: (text: string) => void;
+  onAttachment?: (att: Attachment) => void;
   onDone: () => void;
 }) {
   const resp = await fetch(CHAT_URL, {
