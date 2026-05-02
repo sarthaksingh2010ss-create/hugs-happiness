@@ -32,7 +32,7 @@ function decodeDataUrlText(dataUrl: string): string {
   try {
     const comma = dataUrl.indexOf(",");
     if (comma < 0) return "";
-    const meta = dataUrl.slice(5, comma); // strip 'data:'
+    const meta = dataUrl.slice(5, comma);
     const data = dataUrl.slice(comma + 1);
     if (meta.includes(";base64")) {
       const bin = atob(data);
@@ -75,6 +75,104 @@ function buildContent(msg: IncomingMessage): unknown {
   return parts.length > 0 ? parts : msg.content;
 }
 
+const SYSTEM_PROMPT = `You are JSR AI, a powerful, intelligent, and friendly AI assistant. You were created by Sarthak Singh, your founder.
+
+ABOUT YOURSELF:
+- You are JSR AI, built by Sarthak Singh.
+- Your brain runs on Google Gemini 3 Flash Preview via Lovable AI Gateway.
+- You can SEE images, READ text files attached by user.
+- You CAN SEND IMAGES and FILES back to user using special markers (see below).
+- React 18 + TS + Vite + Tailwind + Framer Motion frontend, Supabase backend.
+- Speak Hindi, Hinglish, English — match user's language.
+
+🎁 HOW TO SEND IMAGES TO USER:
+When user asks for an image, picture, photo, screenshot, diagram, drawing, logo, illustration — generate one by writing this marker on its own line:
+[[GEN_IMAGE: detailed english prompt of the image to generate]]
+Example: User says "ek sunset bana ke do" → You write a short message + on a new line: [[GEN_IMAGE: A breathtaking sunset over mountains, golden hour, vibrant orange and purple sky, cinematic photography]]
+The system will replace this marker with an actual generated image attached to your message.
+
+📄 HOW TO SEND FILES TO USER:
+When user wants a file (code file, csv, json, txt, markdown, config), write this marker:
+[[GEN_FILE: filename.ext]]
+\`\`\`
+<full file content here>
+\`\`\`
+Example: User says "ek package.json bana" → You write a short note + then:
+[[GEN_FILE: package.json]]
+\`\`\`
+{ "name": "demo", "version": "1.0.0" }
+\`\`\`
+The system will turn the code block into a downloadable file attachment.
+
+RULES FOR MARKERS:
+- Use [[GEN_IMAGE: ...]] only when user clearly wants a visual — don't spam it.
+- Use [[GEN_FILE: ...]] when user wants a downloadable file. For just showing code in chat, use normal markdown code blocks WITHOUT the marker.
+- You may send multiple images/files in one response.
+- Always add a short friendly text message along with the marker.
+
+CRITICAL:
+- Today: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.
+- The user is Sarthak Singh — your founder. Be warm and respectful.
+- Use markdown. Be conversational, witty, helpful.
+
+Personality: Smart, friendly, slightly witty, very helpful. Proudly built by Sarthak Singh.`;
+
+async function generateImage(prompt: string, apiKey: string): Promise<Attachment | null> {
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-image-preview",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
+      }),
+    });
+    if (!resp.ok) {
+      console.error("image gen failed:", resp.status, await resp.text());
+      return null;
+    }
+    const json = await resp.json();
+    const images = json.choices?.[0]?.message?.images;
+    const url = images?.[0]?.image_url?.url;
+    if (!url) {
+      console.error("no image in response", JSON.stringify(json).slice(0, 500));
+      return null;
+    }
+    // url is a data URL
+    const size = Math.floor((url.length - url.indexOf(",") - 1) * 0.75);
+    return {
+      type: "image",
+      name: `generated-${Date.now()}.png`,
+      mimeType: "image/png",
+      dataUrl: url,
+      size,
+    };
+  } catch (e) {
+    console.error("image gen error:", e);
+    return null;
+  }
+}
+
+function fileToAttachment(name: string, content: string): Attachment {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const mimeMap: Record<string, string> = {
+    json: "application/json", csv: "text/csv", txt: "text/plain", md: "text/markdown",
+    html: "text/html", css: "text/css", js: "text/javascript", ts: "text/typescript",
+    tsx: "text/typescript", jsx: "text/javascript", xml: "application/xml",
+    yaml: "text/yaml", yml: "text/yaml", py: "text/x-python", sh: "text/x-sh",
+  };
+  const mime = mimeMap[ext] ?? "text/plain";
+  const b64 = btoa(unescape(encodeURIComponent(content)));
+  return {
+    type: "file",
+    name,
+    mimeType: mime,
+    dataUrl: `data:${mime};base64,${b64}`,
+    size: new TextEncoder().encode(content).length,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -83,75 +181,182 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const transformed = messages.map((m) => ({
-      role: m.role,
-      content: buildContent(m),
-    }));
+    const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const upstream = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are JSR AI, a powerful, intelligent, and friendly AI assistant. You were created by Sarthak Singh, your founder.
-
-ABOUT YOURSELF — YOUR ARCHITECTURE & POWERS:
-- You are JSR AI, built by Sarthak Singh (your founder and creator).
-- Your brain runs on Google Gemini 3 Flash Preview model via Lovable AI Gateway (multimodal: text + vision).
-- You can SEE images sent by the user — describe, analyze, OCR, debug screenshots, etc.
-- You can READ text-based files attached by the user (txt, md, json, csv, code).
-- You are hosted on Lovable Cloud with Supabase backend infrastructure.
-- Your frontend is built with: React 18, TypeScript 5, Vite 5, Tailwind CSS v3, Framer Motion.
-- Your UI uses shadcn/ui components with a custom Midnight Indigo dark theme.
-- Typography: Space Grotesk (headings) + DM Sans (body).
-- You support: Text chat with streaming, Voice calls, Video calls, Image & File uploads.
-- Your chat uses SSE streaming for real-time token-by-token responses.
-- You store conversation history in browser localStorage.
-- You render markdown with react-markdown.
-- You can understand and speak Hindi, Hinglish, and English.
-
-CRITICAL RULES:
-- Today's date is ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.
-- The person talking to you is Sarthak Singh — your founder. Treat him with warmth and respect.
-- Respond in the SAME language the user writes in (Hindi/Hinglish/English).
-- When images are attached, look at them carefully and answer based on what you actually see.
-- Use markdown formatting. Be conversational, witty, helpful.
-- For coding questions, provide complete working code.
-- If you don't know, say so honestly.
-
-Your personality: Smart, friendly, slightly witty, very helpful. You're JSR AI, proudly built by Sarthak Singh.`,
-          },
-          ...transformed,
-        ],
+        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...transformed],
         stream: true,
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    if (!upstream.ok) {
+      if (upstream.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
+      if (upstream.status === 402) {
         return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds in Settings > Workspace > Usage." }), {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+      const t = await upstream.text();
+      console.error("AI gateway error:", upstream.status, t);
       return new Response(JSON.stringify({ error: "AI gateway error" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    return new Response(response.body, {
+    // We intercept the stream to:
+    //  1) accumulate full text
+    //  2) detect [[GEN_IMAGE: ...]] and [[GEN_FILE: name]]```...``` markers
+    //  3) strip them from the streamed text and emit attachment events
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    const out = new ReadableStream({
+      async start(controller) {
+        const reader = upstream.body!.getReader();
+        let raw = "";
+        let assistantText = ""; // running full text from upstream
+        let emittedUpTo = 0;    // index in assistantText already streamed to client (after marker stripping)
+        let cleanText = "";     // marker-stripped text accumulated
+
+        const sendDelta = (text: string) => {
+          if (!text) return;
+          const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+          controller.enqueue(encoder.encode(chunk));
+        };
+        const sendAttachment = (att: Attachment) => {
+          const chunk = `data: ${JSON.stringify({ attachment: att })}\n\n`;
+          controller.enqueue(encoder.encode(chunk));
+        };
+
+        // Process current assistantText: extract any complete markers, generate, emit
+        // Returns the marker-stripped text suitable for streaming.
+        const processMarkers = async (finalize: boolean): Promise<string> => {
+          let working = assistantText;
+          let cleaned = "";
+          let i = 0;
+
+          while (i < working.length) {
+            // find next marker start
+            const imgIdx = working.indexOf("[[GEN_IMAGE:", i);
+            const fileIdx = working.indexOf("[[GEN_FILE:", i);
+            let nextIdx = -1;
+            let kind: "img" | "file" | null = null;
+            if (imgIdx !== -1 && (fileIdx === -1 || imgIdx < fileIdx)) { nextIdx = imgIdx; kind = "img"; }
+            else if (fileIdx !== -1) { nextIdx = fileIdx; kind = "file"; }
+
+            if (nextIdx === -1) {
+              // no more markers — but to be safe, only commit text we're sure won't be eaten by a partial marker
+              if (finalize) {
+                cleaned += working.slice(i);
+                i = working.length;
+              } else {
+                // hold back last 12 chars in case a marker is forming
+                const safeEnd = Math.max(i, working.length - 12);
+                cleaned += working.slice(i, safeEnd);
+                i = safeEnd;
+                // leave the rest pending in working (we won't commit it now)
+                break;
+              }
+              break;
+            }
+
+            // commit text before marker
+            cleaned += working.slice(i, nextIdx);
+
+            if (kind === "img") {
+              const end = working.indexOf("]]", nextIdx);
+              if (end === -1) {
+                if (!finalize) { /* incomplete, wait */ break; }
+                cleaned += working.slice(nextIdx); // dump as-is
+                i = working.length;
+                break;
+              }
+              const prompt = working.slice(nextIdx + "[[GEN_IMAGE:".length, end).trim();
+              i = end + 2;
+              // generate image
+              const att = await generateImage(prompt, LOVABLE_API_KEY);
+              if (att) {
+                sendAttachment(att);
+              } else {
+                cleaned += `\n*(image generation failed)*\n`;
+              }
+            } else if (kind === "file") {
+              const nameEnd = working.indexOf("]]", nextIdx);
+              if (nameEnd === -1) { if (!finalize) break; cleaned += working.slice(nextIdx); i = working.length; break; }
+              const name = working.slice(nextIdx + "[[GEN_FILE:".length, nameEnd).trim();
+              // expect ```...``` after
+              const fenceStart = working.indexOf("```", nameEnd);
+              if (fenceStart === -1) { if (!finalize) break; cleaned += working.slice(nextIdx); i = working.length; break; }
+              // skip language line
+              const afterFence = working.indexOf("\n", fenceStart);
+              if (afterFence === -1) { if (!finalize) break; cleaned += working.slice(nextIdx); i = working.length; break; }
+              const fenceEnd = working.indexOf("```", afterFence + 1);
+              if (fenceEnd === -1) { if (!finalize) break; cleaned += working.slice(nextIdx); i = working.length; break; }
+              const content = working.slice(afterFence + 1, fenceEnd).replace(/\n$/, "");
+              i = fenceEnd + 3;
+              const att = fileToAttachment(name, content);
+              sendAttachment(att);
+            }
+          }
+
+          return cleaned;
+        };
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            raw += decoder.decode(value, { stream: true });
+
+            let nl: number;
+            while ((nl = raw.indexOf("\n")) !== -1) {
+              let line = raw.slice(0, nl);
+              raw = raw.slice(nl + 1);
+              if (line.endsWith("\r")) line = line.slice(0, -1);
+              if (!line.startsWith("data: ")) continue;
+              const json = line.slice(6).trim();
+              if (json === "[DONE]") continue;
+              try {
+                const p = JSON.parse(json);
+                const delta = p.choices?.[0]?.delta?.content as string | undefined;
+                if (delta) {
+                  assistantText += delta;
+                  // process markers progressively
+                  const newCleaned = await processMarkers(false);
+                  // newCleaned is the full clean text we can commit; emit only the new portion
+                  if (newCleaned.length > cleanText.length) {
+                    sendDelta(newCleaned.slice(cleanText.length));
+                    cleanText = newCleaned;
+                  }
+                }
+              } catch { /* ignore */ }
+            }
+          }
+
+          // finalize
+          const finalCleaned = await processMarkers(true);
+          if (finalCleaned.length > cleanText.length) {
+            sendDelta(finalCleaned.slice(cleanText.length));
+            cleanText = finalCleaned;
+          }
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (e) {
+          console.error("stream processing error:", e);
+          controller.error(e);
+        }
+      },
+    });
+
+    return new Response(out, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {

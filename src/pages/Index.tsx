@@ -141,6 +141,22 @@ export default function Index() {
               )
             );
           },
+          onAttachment: (att) => {
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === convoId
+                  ? {
+                      ...c,
+                      messages: c.messages.map((m) =>
+                        m.id === aiMsgId
+                          ? { ...m, attachments: [...(m.attachments ?? []), att] }
+                          : m
+                      ),
+                    }
+                  : c
+              )
+            );
+          },
           onDone: () => setIsLoading(false),
         });
       } catch (e) {

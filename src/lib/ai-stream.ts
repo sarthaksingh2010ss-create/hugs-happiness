@@ -12,10 +12,12 @@ export type OutgoingMessage = {
 export async function streamChat({
   messages,
   onDelta,
+  onAttachment,
   onDone,
 }: {
   messages: OutgoingMessage[];
   onDelta: (text: string) => void;
+  onAttachment?: (att: Attachment) => void;
   onDone: () => void;
 }) {
   const resp = await fetch(CHAT_URL, {
@@ -71,6 +73,7 @@ export async function streamChat({
         const parsed = JSON.parse(jsonStr);
         const content = parsed.choices?.[0]?.delta?.content as string | undefined;
         if (content) onDelta(content);
+        if (parsed.attachment && onAttachment) onAttachment(parsed.attachment as Attachment);
       } catch {
         textBuffer = line + "\n" + textBuffer;
         break;
@@ -90,6 +93,7 @@ export async function streamChat({
         const parsed = JSON.parse(jsonStr);
         const content = parsed.choices?.[0]?.delta?.content as string | undefined;
         if (content) onDelta(content);
+        if (parsed.attachment && onAttachment) onAttachment(parsed.attachment as Attachment);
       } catch { /* ignore */ }
     }
   }
