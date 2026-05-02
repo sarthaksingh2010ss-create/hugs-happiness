@@ -1,10 +1,16 @@
-import { Bot, User } from "lucide-react";
+import { Bot, User, FileText, Download } from "lucide-react";
 import { Message } from "@/lib/chat-store";
 import ReactMarkdown from "react-markdown";
 import { motion } from "framer-motion";
 
 interface ChatMessageProps {
   message: Message;
+}
+
+function formatSize(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function ChatMessage({ message }: ChatMessageProps) {
@@ -32,9 +38,42 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         <p className="text-xs font-medium text-muted-foreground mb-1">
           {isUser ? "You" : "JSR AI"}
         </p>
-        <div className="prose-chat text-foreground">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
-        </div>
+
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {message.attachments.map((a, i) =>
+              a.type === "image" ? (
+                <a key={i} href={a.dataUrl} target="_blank" rel="noopener noreferrer">
+                  <img
+                    src={a.dataUrl}
+                    alt={a.name}
+                    className="max-h-48 rounded-lg border border-border object-cover hover:opacity-90 transition-opacity"
+                  />
+                </a>
+              ) : (
+                <a
+                  key={i}
+                  href={a.dataUrl}
+                  download={a.name}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-secondary hover:bg-secondary/70 transition-colors max-w-xs"
+                >
+                  <FileText size={16} className="text-primary shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium truncate">{a.name}</div>
+                    <div className="text-[10px] text-muted-foreground">{formatSize(a.size)}</div>
+                  </div>
+                  <Download size={14} className="text-muted-foreground" />
+                </a>
+              )
+            )}
+          </div>
+        )}
+
+        {message.content && (
+          <div className="prose-chat text-foreground">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+        )}
       </div>
     </motion.div>
   );

@@ -1,14 +1,20 @@
-import { Message } from "./chat-store";
+import { Message, Attachment } from "./chat-store";
 import { toast } from "@/hooks/use-toast";
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`;
+
+export type OutgoingMessage = {
+  role: "user" | "assistant";
+  content: string;
+  attachments?: Attachment[];
+};
 
 export async function streamChat({
   messages,
   onDelta,
   onDone,
 }: {
-  messages: Pick<Message, "role" | "content">[];
+  messages: OutgoingMessage[];
   onDelta: (text: string) => void;
   onDone: () => void;
 }) {
@@ -72,7 +78,6 @@ export async function streamChat({
     }
   }
 
-  // Final flush
   if (textBuffer.trim()) {
     for (let raw of textBuffer.split("\n")) {
       if (!raw) continue;
