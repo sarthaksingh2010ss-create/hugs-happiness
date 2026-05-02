@@ -1,8 +1,18 @@
+export interface Attachment {
+  type: "image" | "file";
+  name: string;
+  mimeType: string;
+  /** data URL (base64) for images; for files it's also a data URL so it persists in localStorage */
+  dataUrl: string;
+  size: number;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  attachments?: Attachment[];
 }
 
 export interface Conversation {
