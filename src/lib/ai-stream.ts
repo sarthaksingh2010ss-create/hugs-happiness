@@ -93,6 +93,7 @@ export async function streamChat({
         const parsed = JSON.parse(jsonStr);
         const content = parsed.choices?.[0]?.delta?.content as string | undefined;
         if (content) onDelta(content);
+        if (parsed.attachment && onAttachment) onAttachment(parsed.attachment as Attachment);
       } catch { /* ignore */ }
     }
   }
