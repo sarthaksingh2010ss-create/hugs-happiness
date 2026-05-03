@@ -182,8 +182,22 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
-    const upstream = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Flatten multimodal content to text-only for Groq fallback (Llama 3.3 70B has no vision)
+    const flattenForGroq = (content: unknown): string => {
+      if (typeof content === "string") return content;
+      if (Array.isArray(content)) {
+        return content.map((p: any) => {
+          if (p?.type === "text") return p.text ?? "";
+          if (p?.type === "image_url") return "[user attached an image — vision unavailable on fallback model]";
+          return "";
+        }).join("\n");
+      }
+      return String(content ?? "");
+    };
+
+    const callLovable = () => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -193,6 +207,28 @@ serve(async (req) => {
       }),
     });
 
+    const callGroq = () => fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT + "\n\n[Note: You are currently running on Llama 3.3 70B (Groq) as a fallback because Lovable AI credits ran out. Image vision is disabled on this fallback, but you can still generate images and files using the markers above.]" },
+          ...transformed.map((m) => ({ role: m.role, content: flattenForGroq(m.content) })),
+        ],
+        stream: true,
+      }),
+    });
+
+    let upstream = await callLovable();
+    let usingFallback = false;
+
+    if (!upstream.ok && (upstream.status === 402 || upstream.status === 429) && GROQ_API_KEY) {
+      console.log(`Lovable AI returned ${upstream.status}, falling back to Groq Llama 3.3 70B`);
+      upstream = await callGroq();
+      usingFallback = true;
+    }
+
     if (!upstream.ok) {
       if (upstream.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
@@ -200,12 +236,12 @@ serve(async (req) => {
         });
       }
       if (upstream.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted. Please add funds in Settings > Workspace > Usage." }), {
+        return new Response(JSON.stringify({ error: "Credits exhausted on both providers. Please add funds in Settings > Workspace > Usage." }), {
           status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       const t = await upstream.text();
-      console.error("AI gateway error:", upstream.status, t);
+      console.error(`AI gateway error (fallback=${usingFallback}):`, upstream.status, t);
       return new Response(JSON.stringify({ error: "AI gateway error" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
