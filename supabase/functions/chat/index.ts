@@ -178,11 +178,12 @@ serve(async (req) => {
 
   try {
     const { messages } = (await req.json()) as { messages: IncomingMessage[] };
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")?.trim();
+    const sanitizeKey = (k: string | undefined) => k?.replace(/[^\x20-\x7E]/g, "").trim();
+    const LOVABLE_API_KEY = sanitizeKey(Deno.env.get("LOVABLE_API_KEY"));
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
-    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY")?.trim();
+    const GROQ_API_KEY = sanitizeKey(Deno.env.get("GROQ_API_KEY"));
 
     // Flatten multimodal content to text-only for Groq fallback (Llama 3.3 70B has no vision)
     const flattenForGroq = (content: unknown): string => {
