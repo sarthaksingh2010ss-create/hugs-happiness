@@ -33,6 +33,13 @@ function providerErrorMessage(status: number, usingFallback: boolean): string {
   return "AI response generate nahi ho paya. Please dobara try karein.";
 }
 
+function offlineAssistantReply(messages: IncomingMessage[]): string {
+  const last = [...messages].reverse().find((m) => m.role === "user")?.content?.trim() ?? "";
+  if (!last) return "Main online AI provider se connect nahi ho pa raha, lekin chat service ab crash nahi karegi. Apna sawaal dobara bhej do.";
+
+  return `Bhai, backend AI provider abhi authenticate nahi ho pa raha, isliye main live model response generate nahi kar sakta.\n\nTumhara message mila: “${last.slice(0, 300)}${last.length > 300 ? "…" : ""}”\n\nCurrent status: app ka chat crash/500 loop band kar diya hai. Real AI replies ke liye working Groq key ya Lovable AI balance chahiye hoga.`;
+}
+
 interface Attachment {
   type: "image" | "file";
   name: string;
@@ -279,6 +286,9 @@ serve(async (req) => {
     if (!upstream.ok) {
       const t = await upstream.text();
       console.error(`AI provider error (fallback=${usingFallback}):`, upstream.status, t);
+      if (usingFallback && (upstream.status === 401 || upstream.status === 403)) {
+        return streamTextResponse(offlineAssistantReply(messages));
+      }
       return streamTextResponse(providerErrorMessage(upstream.status, usingFallback));
     }
 
