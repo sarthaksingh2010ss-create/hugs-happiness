@@ -24,13 +24,20 @@ function streamTextResponse(message: string): Response {
 function providerErrorMessage(status: number, usingFallback: boolean): string {
   if (status === 401 || status === 403) {
     return usingFallback
-      ? "Groq API key invalid ya revoked lag rahi hai. Please secure secrets mein nayi Groq key update kar dein, phir main normal reply kar paunga."
+      ? "AI fallback authorization abhi fail ho raha hai. Maine key format cleanup apply kar diya hai; agar issue rahe to credits/fallback provider side check karna padega."
       : "AI service authorization fail ho gaya. Please backend AI key check/update karein.";
   }
   if (status === 402) return "AI credits exhausted hain. Please Workspace usage mein credits add kar dein ya valid fallback key use karein.";
   if (status === 429) return "AI service abhi rate limit kar raha hai. Thodi der baad dobara try karein.";
   if (status >= 500) return "AI service abhi unavailable hai. Please ek minute baad dobara try karein.";
   return "AI response generate nahi ho paya. Please dobara try karein.";
+}
+
+function offlineAssistantReply(messages: IncomingMessage[]): string {
+  const last = [...messages].reverse().find((m) => m.role === "user")?.content?.trim() ?? "";
+  if (!last) return "Main online AI provider se connect nahi ho pa raha, lekin chat service ab crash nahi karegi. Apna sawaal dobara bhej do.";
+
+  return `Bhai, backend AI provider abhi authenticate nahi ho pa raha, isliye main live model response generate nahi kar sakta.\n\nTumhara message mila: “${last.slice(0, 300)}${last.length > 300 ? "…" : ""}”\n\nCurrent status: app ka chat crash/500 loop band kar diya hai. Real AI replies ke liye working Groq key ya Lovable AI balance chahiye hoga.`;
 }
 
 interface Attachment {
@@ -146,6 +153,8 @@ CRITICAL:
 Personality: Smart, friendly, slightly witty, very helpful. Proudly built by Sarthak Singh.`;
 
 async function generateImage(prompt: string, apiKey: string): Promise<Attachment | null> {
+  if (!apiKey) return null;
+
   try {
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -206,12 +215,23 @@ serve(async (req) => {
 
   try {
     const { messages } = (await req.json()) as { messages: IncomingMessage[] };
-    const sanitizeKey = (k: string | undefined) => k?.replace(/[^\x20-\x7E]/g, "").trim();
-    const LOVABLE_API_KEY = sanitizeKey(Deno.env.get("LOVABLE_API_KEY"));
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const sanitizeKey = (k: string | undefined, envName?: string) => {
+      let value = k?.replace(/[^\x20-\x7E]/g, "").trim();
+      if (!value) return value;
+      if (envName && value.includes("=")) {
+        const match = value.match(new RegExp(`${envName}\\s*=\\s*['\"]?([^'\"\\s]+)`, "i"));
+        value = match?.[1] ?? value.split("=").pop()?.trim() ?? value;
+      }
+      if (envName === "GROQ_API_KEY") {
+        const groqToken = value.match(/gsk_[A-Za-z0-9_-]+/)?.[0];
+        if (groqToken) value = groqToken;
+      }
+      return value.replace(/^['\"]|['\"]$/g, "").trim();
+    };
+    const LOVABLE_API_KEY = sanitizeKey(Deno.env.get("LOVABLE_API_KEY"), "LOVABLE_API_KEY");
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
-    const GROQ_API_KEY = sanitizeKey(Deno.env.get("GROQ_API_KEY"));
+    const GROQ_API_KEY = sanitizeKey(Deno.env.get("GROQ_API_KEY"), "GROQ_API_KEY");
 
     // Flatten multimodal content to text-only for Groq fallback (Llama 3.3 70B has no vision)
     const flattenForGroq = (content: unknown): string => {
@@ -249,18 +269,26 @@ serve(async (req) => {
       }),
     });
 
-    let upstream = await callLovable();
-    let usingFallback = false;
+    let upstream: Response | null = LOVABLE_API_KEY ? await callLovable() : null;
+    let usingFallback = !LOVABLE_API_KEY;
 
-    if (!upstream.ok && (upstream.status === 402 || upstream.status === 429) && GROQ_API_KEY) {
-      console.log(`Lovable AI returned ${upstream.status}, falling back to Groq Llama 3.3 70B`);
+    if ((!upstream || (!upstream.ok && (upstream.status === 402 || upstream.status === 429))) && GROQ_API_KEY) {
+      if (upstream) console.log(`Lovable AI returned ${upstream.status}, falling back to Groq Llama 3.3 70B`);
+      else console.log("Lovable AI key missing, using Groq Llama 3.3 70B fallback");
       upstream = await callGroq();
       usingFallback = true;
+    }
+
+    if (!upstream) {
+      return streamTextResponse("AI backend mein abhi koi working provider key available nahi hai. Please Lovable Cloud secrets mein LOVABLE_API_KEY ya GROQ_API_KEY verify karna hoga.");
     }
 
     if (!upstream.ok) {
       const t = await upstream.text();
       console.error(`AI provider error (fallback=${usingFallback}):`, upstream.status, t);
+      if (usingFallback && (upstream.status === 401 || upstream.status === 403)) {
+        return streamTextResponse(offlineAssistantReply(messages));
+      }
       return streamTextResponse(providerErrorMessage(upstream.status, usingFallback));
     }
 
