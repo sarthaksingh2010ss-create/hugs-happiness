@@ -259,21 +259,9 @@ serve(async (req) => {
     }
 
     if (!upstream.ok) {
-      if (upstream.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (upstream.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted on both providers. Please add funds in Settings > Workspace > Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await upstream.text();
-      console.error(`AI gateway error (fallback=${usingFallback}):`, upstream.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error(`AI provider error (fallback=${usingFallback}):`, upstream.status, t);
+      return streamTextResponse(providerErrorMessage(upstream.status, usingFallback));
     }
 
     // We intercept the stream to:
@@ -416,7 +404,9 @@ serve(async (req) => {
           controller.close();
         } catch (e) {
           console.error("stream processing error:", e);
-          controller.error(e);
+          sendDelta("AI response stream beech mein fail ho gaya. Please dobara try karein.");
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
         }
       },
     });
@@ -426,8 +416,6 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return streamTextResponse("Chat service abhi response start nahi kar paaya. Please dobara try karein.");
   }
 });
