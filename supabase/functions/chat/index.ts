@@ -5,6 +5,34 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function streamTextResponse(message: string): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: message } }] })}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(body, {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
+}
+
+function providerErrorMessage(status: number, usingFallback: boolean): string {
+  if (status === 401 || status === 403) {
+    return usingFallback
+      ? "Groq API key invalid ya revoked lag rahi hai. Please secure secrets mein nayi Groq key update kar dein, phir main normal reply kar paunga."
+      : "AI service authorization fail ho gaya. Please backend AI key check/update karein.";
+  }
+  if (status === 402) return "AI credits exhausted hain. Please Workspace usage mein credits add kar dein ya valid fallback key use karein.";
+  if (status === 429) return "AI service abhi rate limit kar raha hai. Thodi der baad dobara try karein.";
+  if (status >= 500) return "AI service abhi unavailable hai. Please ek minute baad dobara try karein.";
+  return "AI response generate nahi ho paya. Please dobara try karein.";
+}
+
 interface Attachment {
   type: "image" | "file";
   name: string;
@@ -231,21 +259,9 @@ serve(async (req) => {
     }
 
     if (!upstream.ok) {
-      if (upstream.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (upstream.status === 402) {
-        return new Response(JSON.stringify({ error: "Credits exhausted on both providers. Please add funds in Settings > Workspace > Usage." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
       const t = await upstream.text();
-      console.error(`AI gateway error (fallback=${usingFallback}):`, upstream.status, t);
-      return new Response(JSON.stringify({ error: "AI gateway error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error(`AI provider error (fallback=${usingFallback}):`, upstream.status, t);
+      return streamTextResponse(providerErrorMessage(upstream.status, usingFallback));
     }
 
     // We intercept the stream to:
@@ -388,7 +404,9 @@ serve(async (req) => {
           controller.close();
         } catch (e) {
           console.error("stream processing error:", e);
-          controller.error(e);
+          sendDelta("AI response stream beech mein fail ho gaya. Please dobara try karein.");
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
         }
       },
     });
@@ -398,8 +416,6 @@ serve(async (req) => {
     });
   } catch (e) {
     console.error("chat error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return streamTextResponse("Chat service abhi response start nahi kar paaya. Please dobara try karein.");
   }
 });
