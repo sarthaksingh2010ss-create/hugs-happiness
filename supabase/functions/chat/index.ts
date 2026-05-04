@@ -5,6 +5,34 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function streamTextResponse(message: string): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: message } }] })}\n\n`));
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(body, {
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+  });
+}
+
+function providerErrorMessage(status: number, usingFallback: boolean): string {
+  if (status === 401 || status === 403) {
+    return usingFallback
+      ? "Groq API key invalid ya revoked lag rahi hai. Please secure secrets mein nayi Groq key update kar dein, phir main normal reply kar paunga."
+      : "AI service authorization fail ho gaya. Please backend AI key check/update karein.";
+  }
+  if (status === 402) return "AI credits exhausted hain. Please Workspace usage mein credits add kar dein ya valid fallback key use karein.";
+  if (status === 429) return "AI service abhi rate limit kar raha hai. Thodi der baad dobara try karein.";
+  if (status >= 500) return "AI service abhi unavailable hai. Please ek minute baad dobara try karein.";
+  return "AI response generate nahi ho paya. Please dobara try karein.";
+}
+
 interface Attachment {
   type: "image" | "file";
   name: string;
