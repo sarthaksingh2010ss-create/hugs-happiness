@@ -215,6 +215,10 @@ serve(async (req) => {
         const match = value.match(new RegExp(`${envName}\\s*=\\s*['\"]?([^'\"\\s]+)`, "i"));
         value = match?.[1] ?? value.split("=").pop()?.trim() ?? value;
       }
+      if (envName === "GROQ_API_KEY") {
+        const groqToken = value.match(/gsk_[A-Za-z0-9_-]+/)?.[0];
+        if (groqToken) value = groqToken;
+      }
       return value.replace(/^['\"]|['\"]$/g, "").trim();
     };
     const LOVABLE_API_KEY = sanitizeKey(Deno.env.get("LOVABLE_API_KEY"), "LOVABLE_API_KEY");
