@@ -221,7 +221,9 @@ serve(async (req) => {
       }
       return value.replace(/^['\"]|['\"]$/g, "").trim();
     };
-    const LOVABLE_API_KEY = sanitizeKey(Deno.env.get("LOVABLE_API_KEY"), "LOVABLE_API_KEY");
+    const rawLovable = Deno.env.get("LOVABLE_API_KEY");
+    const LOVABLE_API_KEY = rawLovable?.replace(/[^\x20-\x7E]/g, "").trim();
+    console.log("LOVABLE key debug:", { hasRaw: !!rawLovable, rawLen: rawLovable?.length ?? 0, cleanLen: LOVABLE_API_KEY?.length ?? 0, prefix: LOVABLE_API_KEY?.slice(0, 4) });
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
     const callLovable = () => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
