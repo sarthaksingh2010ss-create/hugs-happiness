@@ -226,6 +226,20 @@ serve(async (req) => {
     console.log("LOVABLE key debug:", { hasRaw: !!rawLovable, rawLen: rawLovable?.length ?? 0, cleanLen: LOVABLE_API_KEY?.length ?? 0, prefix: LOVABLE_API_KEY?.slice(0, 4) });
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
+    const GROQ_API_KEY = sanitizeKey(Deno.env.get("GROQ_API_KEY"), "GROQ_API_KEY");
+
+    const flattenForGroq = (content: unknown): string => {
+      if (typeof content === "string") return content;
+      if (Array.isArray(content)) {
+        return content.map((p: any) => {
+          if (p?.type === "text") return p.text ?? "";
+          if (p?.type === "image_url") return "[user attached an image — vision unavailable on fallback model]";
+          return "";
+        }).join("\n");
+      }
+      return String(content ?? "");
+    };
+
     const callLovable = () => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -236,13 +250,31 @@ serve(async (req) => {
       }),
     });
 
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY is missing in chat function runtime");
-      return streamTextResponse("Lovable AI key backend runtime mein load nahi ho rahi. Function redeploy ke baad dobara try karein.");
+    const callGroq = () => fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT + "\n\n[Running on Llama 3.3 70B via Groq fallback. Vision disabled, but image/file generation markers still work.]" },
+          ...transformed.map((m) => ({ role: m.role, content: flattenForGroq(m.content) })),
+        ],
+        stream: true,
+      }),
+    });
+
+    let upstream: Response | null = LOVABLE_API_KEY ? await callLovable() : null;
+    let usingFallback = !LOVABLE_API_KEY;
+
+    if ((!upstream || (!upstream.ok && (upstream.status === 402 || upstream.status === 429 || upstream.status === 401 || upstream.status === 403))) && GROQ_API_KEY) {
+      console.log(upstream ? `Lovable AI ${upstream.status}, falling back to Groq` : "No Lovable key, using Groq");
+      upstream = await callGroq();
+      usingFallback = true;
     }
 
-    const upstream = await callLovable();
-    const usingFallback = false;
+    if (!upstream) {
+      return streamTextResponse("Koi bhi AI provider key configure nahi hai. LOVABLE_API_KEY ya GROQ_API_KEY add karein.");
+    }
 
     if (!upstream.ok) {
       const t = await upstream.text();
