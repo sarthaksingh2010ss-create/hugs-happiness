@@ -33,13 +33,6 @@ function providerErrorMessage(status: number, usingFallback: boolean): string {
   return "AI response generate nahi ho paya. Please dobara try karein.";
 }
 
-function offlineAssistantReply(messages: IncomingMessage[]): string {
-  const last = [...messages].reverse().find((m) => m.role === "user")?.content?.trim() ?? "";
-  if (!last) return "Main online AI provider se connect nahi ho pa raha, lekin chat service ab crash nahi karegi. Apna sawaal dobara bhej do.";
-
-  return `Bhai, backend AI provider abhi authenticate nahi ho pa raha, isliye main live model response generate nahi kar sakta.\n\nTumhara message mila: “${last.slice(0, 300)}${last.length > 300 ? "…" : ""}”\n\nCurrent status: app ka chat crash/500 loop band kar diya hai. Real AI replies ke liye working Groq key ya Lovable AI balance chahiye hoga.`;
-}
-
 interface Attachment {
   type: "image" | "file";
   name: string;
@@ -231,21 +224,6 @@ serve(async (req) => {
     const LOVABLE_API_KEY = sanitizeKey(Deno.env.get("LOVABLE_API_KEY"), "LOVABLE_API_KEY");
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
-    const GROQ_API_KEY = sanitizeKey(Deno.env.get("GROQ_API_KEY"), "GROQ_API_KEY");
-
-    // Flatten multimodal content to text-only for Groq fallback (Llama 3.3 70B has no vision)
-    const flattenForGroq = (content: unknown): string => {
-      if (typeof content === "string") return content;
-      if (Array.isArray(content)) {
-        return content.map((p: any) => {
-          if (p?.type === "text") return p.text ?? "";
-          if (p?.type === "image_url") return "[user attached an image — vision unavailable on fallback model]";
-          return "";
-        }).join("\n");
-      }
-      return String(content ?? "");
-    };
-
     const callLovable = () => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -256,39 +234,17 @@ serve(async (req) => {
       }),
     });
 
-    const callGroq = () => fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT + "\n\n[Note: You are currently running on Llama 3.3 70B (Groq) as a fallback because Lovable AI credits ran out. Image vision is disabled on this fallback, but you can still generate images and files using the markers above.]" },
-          ...transformed.map((m) => ({ role: m.role, content: flattenForGroq(m.content) })),
-        ],
-        stream: true,
-      }),
-    });
-
-    let upstream: Response | null = LOVABLE_API_KEY ? await callLovable() : null;
-    let usingFallback = !LOVABLE_API_KEY;
-
-    if ((!upstream || (!upstream.ok && (upstream.status === 402 || upstream.status === 429))) && GROQ_API_KEY) {
-      if (upstream) console.log(`Lovable AI returned ${upstream.status}, falling back to Groq Llama 3.3 70B`);
-      else console.log("Lovable AI key missing, using Groq Llama 3.3 70B fallback");
-      upstream = await callGroq();
-      usingFallback = true;
+    if (!LOVABLE_API_KEY) {
+      console.error("LOVABLE_API_KEY is missing in chat function runtime");
+      return streamTextResponse("Lovable AI key backend runtime mein load nahi ho rahi. Function redeploy ke baad dobara try karein.");
     }
 
-    if (!upstream) {
-      return streamTextResponse("AI backend mein abhi koi working provider key available nahi hai. Please Lovable Cloud secrets mein LOVABLE_API_KEY ya GROQ_API_KEY verify karna hoga.");
-    }
+    const upstream = await callLovable();
+    const usingFallback = false;
 
     if (!upstream.ok) {
       const t = await upstream.text();
       console.error(`AI provider error (fallback=${usingFallback}):`, upstream.status, t);
-      if (usingFallback && (upstream.status === 401 || upstream.status === 403)) {
-        return streamTextResponse(offlineAssistantReply(messages));
-      }
       return streamTextResponse(providerErrorMessage(upstream.status, usingFallback));
     }
 
