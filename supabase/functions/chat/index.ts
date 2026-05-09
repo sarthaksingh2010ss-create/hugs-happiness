@@ -216,7 +216,7 @@ serve(async (req) => {
         value = match?.[1] ?? value.split("=").pop()?.trim() ?? value;
       }
       if (envName === "GROQ_API_KEY") {
-        const groqToken = value.match(/gsk_[A-Za-z0-9_-]+/)?.[0];
+        const groqToken = value.match(/gsk_[^\s'\"]+/)?.[0];
         if (groqToken) value = groqToken;
       }
       return value.replace(/^['\"]|['\"]$/g, "").trim();
@@ -227,6 +227,7 @@ serve(async (req) => {
 
     const transformed = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
     const GROQ_API_KEY = sanitizeKey(Deno.env.get("GROQ_API_KEY"), "GROQ_API_KEY");
+    console.log("GROQ key debug:", { hasKey: !!GROQ_API_KEY, len: GROQ_API_KEY?.length ?? 0, startsGsk: GROQ_API_KEY?.startsWith("gsk_") ?? false });
 
     const flattenForGroq = (content: unknown): string => {
       if (typeof content === "string") return content;
