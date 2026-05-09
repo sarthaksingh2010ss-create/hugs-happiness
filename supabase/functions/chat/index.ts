@@ -216,7 +216,7 @@ serve(async (req) => {
         value = match?.[1] ?? value.split("=").pop()?.trim() ?? value;
       }
       if (envName === "GROQ_API_KEY") {
-        const groqToken = value.match(/gsk_[A-Za-z0-9_-]+/)?.[0];
+        const groqToken = value.match(/gsk_[^\s'\"]+/)?.[0];
         if (groqToken) value = groqToken;
       }
       return value.replace(/^['\"]|['\"]$/g, "").trim();
