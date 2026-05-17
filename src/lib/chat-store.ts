@@ -24,21 +24,51 @@ export interface Conversation {
 }
 
 const STORAGE_KEY = "jsr-ai-conversations";
+const BACKUP_STORAGE_KEY = "jsr-ai-conversations-backup";
+const LEGACY_STORAGE_KEYS = ["conversations", "chat-conversations", "jsr-conversations", "messages"];
+
+function parseConversations(value: string | null): Conversation[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((c) => Array.isArray(c?.messages));
+  } catch {
+    return [];
+  }
+}
 
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
 export function loadConversations(): Conversation[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+  const current = parseConversations(localStorage.getItem(STORAGE_KEY));
+  if (current.length > 0) return current;
+
+  const backup = parseConversations(localStorage.getItem(BACKUP_STORAGE_KEY));
+  if (backup.length > 0) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(backup));
+    return backup;
   }
+
+  for (const key of LEGACY_STORAGE_KEYS) {
+    const legacy = parseConversations(localStorage.getItem(key));
+    if (legacy.length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
+      localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(legacy));
+      return legacy;
+    }
+  }
+
+  return [];
 }
 
 export function saveConversations(convos: Conversation[]): void {
+  const existing = parseConversations(localStorage.getItem(STORAGE_KEY));
+  if (existing.length > 0) {
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(existing));
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(convos));
 }
 
