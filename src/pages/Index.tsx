@@ -217,12 +217,15 @@ export default function Index() {
       />
 
       <main className="flex-1 flex flex-col min-w-0">
+        <h1 className="sr-only">JSR AI — Intelligent Chat &amp; Voice Assistant</h1>
         <header className="h-12 border-b border-border flex items-center px-3 gap-3 shrink-0">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? "Close conversations sidebar" : "Open conversations sidebar"}
+            aria-expanded={sidebarOpen}
             className="p-1.5 rounded-lg hover:bg-secondary transition-colors"
           >
-            <Menu size={18} className="text-muted-foreground" />
+            <Menu size={18} className="text-muted-foreground" aria-hidden="true" />
           </button>
           <h2 className="text-sm font-heading font-medium text-foreground truncate">
             {activeConvo?.title ?? "JSR AI"}

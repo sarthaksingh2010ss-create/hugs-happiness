@@ -83,9 +83,10 @@ export default function ChatSidebar({
               </button>
               <button
                 onClick={onClose}
+                aria-label="Close sidebar"
                 className="p-1.5 rounded-lg hover:bg-sidebar-accent transition-colors md:hidden"
               >
-                <X size={18} className="text-muted-foreground" />
+                <X size={18} className="text-muted-foreground" aria-hidden="true" />
               </button>
             </div>
 
@@ -124,9 +125,10 @@ export default function ChatSidebar({
                           e.stopPropagation();
                           onDelete(convo.id);
                         }}
+                        aria-label={`Delete conversation ${convo.title}`}
                         className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-sidebar-accent text-muted-foreground hover:text-destructive transition-all"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={13} aria-hidden="true" />
                       </button>
                     </div>
                   ))}

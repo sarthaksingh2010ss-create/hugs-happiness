@@ -1,0 +1,9 @@
+# JSR AI
+
+> JSR AI is a powerful AI assistant built by Sarthak Singh — streaming chat, voice & video calls, image generation, and persistent conversation history.
+
+JSR AI runs on the Lovable AI Gateway (Google Gemini 3 Flash) with a Groq Llama 3.3 70B fallback. It speaks Hindi, Hinglish, and English, and can read attached images and text files, generate images, and produce downloadable files inline.
+
+## Pages
+
+- [Home](/): JSR AI chat, voice call, video call, and conversation history.
