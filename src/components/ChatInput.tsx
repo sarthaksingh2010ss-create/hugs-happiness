@@ -119,10 +119,11 @@ export default function ChatInput({ onSend, onVoiceCall, onVideoCall, isLoading 
                   )}
                   <button
                     onClick={() => setAttachments((p) => p.filter((_, idx) => idx !== i))}
+                    aria-label={`Remove attachment ${a.name}`}
                     className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-background/80 hover:bg-background flex items-center justify-center"
                     title="Remove"
                   >
-                    <X size={12} />
+                    <X size={12} aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -133,10 +134,11 @@ export default function ChatInput({ onSend, onVoiceCall, onVideoCall, isLoading 
         <div className="flex items-end gap-2 bg-secondary rounded-2xl px-3 py-2 border border-border focus-within:border-primary/40 transition-colors">
           <button
             onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach image or file"
             className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors shrink-0"
             title="Attach image or file"
           >
-            <Paperclip size={18} className="text-muted-foreground hover:text-foreground transition-colors" />
+            <Paperclip size={18} className="text-muted-foreground hover:text-foreground transition-colors" aria-hidden="true" />
           </button>
           <input
             ref={fileInputRef}

@@ -463,32 +463,37 @@ export default function VoiceCall({ isOpen, onClose, mode, mediaStream = null }:
             <div className="flex items-center gap-5">
               <button
                 onClick={() => setIsMuted((current) => !current)}
+                aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+                aria-pressed={isMuted}
                 className={`flex h-14 w-14 items-center justify-center rounded-full transition-all shadow-lg ${
                   isMuted
                     ? "bg-destructive text-destructive-foreground"
                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                 }`}
               >
-                {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
+                {isMuted ? <MicOff size={22} aria-hidden="true" /> : <Mic size={22} aria-hidden="true" />}
               </button>
 
               <button
                 onClick={handleEnd}
+                aria-label="End call"
                 className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-xl transition-colors hover:bg-destructive/90"
               >
-                <PhoneOff size={24} />
+                <PhoneOff size={24} aria-hidden="true" />
               </button>
 
               {mode === "video" && (
                 <button
                   onClick={() => setIsCamOff((current) => !current)}
+                  aria-label={isCamOff ? "Turn camera on" : "Turn camera off"}
+                  aria-pressed={isCamOff}
                   className={`flex h-14 w-14 items-center justify-center rounded-full transition-all shadow-lg ${
                     isCamOff
                       ? "bg-destructive text-destructive-foreground"
                       : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                   }`}
                 >
-                  {isCamOff ? <VideoOff size={22} /> : <Video size={22} />}
+                  {isCamOff ? <VideoOff size={22} aria-hidden="true" /> : <Video size={22} aria-hidden="true" />}
                 </button>
               )}
             </div>
