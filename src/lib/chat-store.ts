@@ -38,27 +38,43 @@ function parseConversations(value: string | null): Conversation[] {
   }
 }
 
+function getConversationCandidates(): Conversation[] {
+  const keys = new Set([STORAGE_KEY, BACKUP_STORAGE_KEY, ...LEGACY_STORAGE_KEYS]);
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key) keys.add(key);
+  }
+
+  const byId = new Map<string, Conversation>();
+  keys.forEach((key) => {
+    parseConversations(localStorage.getItem(key)).forEach((conversation) => {
+      const normalized: Conversation = {
+        id: conversation.id || generateId(),
+        title: conversation.title || generateTitle(conversation.messages),
+        messages: conversation.messages,
+        createdAt: conversation.createdAt || conversation.messages[0]?.timestamp || Date.now(),
+        updatedAt: conversation.updatedAt || conversation.messages.at(-1)?.timestamp || Date.now(),
+      };
+      const existing = byId.get(normalized.id);
+      if (!existing || normalized.messages.length > existing.messages.length) {
+        byId.set(normalized.id, normalized);
+      }
+    });
+  });
+
+  return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
 export function loadConversations(): Conversation[] {
-  const current = parseConversations(localStorage.getItem(STORAGE_KEY));
-  if (current.length > 0) return current;
-
-  const backup = parseConversations(localStorage.getItem(BACKUP_STORAGE_KEY));
-  if (backup.length > 0) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(backup));
-    return backup;
-  }
-
-  for (const key of LEGACY_STORAGE_KEYS) {
-    const legacy = parseConversations(localStorage.getItem(key));
-    if (legacy.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(legacy));
-      localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(legacy));
-      return legacy;
-    }
+  const restored = getConversationCandidates();
+  if (restored.length > 0) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(restored));
+    return restored;
   }
 
   return [];
