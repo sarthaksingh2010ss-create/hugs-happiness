@@ -24,21 +24,67 @@ export interface Conversation {
 }
 
 const STORAGE_KEY = "jsr-ai-conversations";
+const BACKUP_STORAGE_KEY = "jsr-ai-conversations-backup";
+const LEGACY_STORAGE_KEYS = ["conversations", "chat-conversations", "jsr-conversations", "messages"];
+
+function parseConversations(value: string | null): Conversation[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((c) => Array.isArray(c?.messages));
+  } catch {
+    return [];
+  }
+}
+
+function getConversationCandidates(): Conversation[] {
+  const keys = new Set([STORAGE_KEY, BACKUP_STORAGE_KEY, ...LEGACY_STORAGE_KEYS]);
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key) keys.add(key);
+  }
+
+  const byId = new Map<string, Conversation>();
+  keys.forEach((key) => {
+    parseConversations(localStorage.getItem(key)).forEach((conversation) => {
+      const normalized: Conversation = {
+        id: conversation.id || generateId(),
+        title: conversation.title || generateTitle(conversation.messages),
+        messages: conversation.messages,
+        createdAt: conversation.createdAt || conversation.messages[0]?.timestamp || Date.now(),
+        updatedAt: conversation.updatedAt || conversation.messages.at(-1)?.timestamp || Date.now(),
+      };
+      const existing = byId.get(normalized.id);
+      if (!existing || normalized.messages.length > existing.messages.length) {
+        byId.set(normalized.id, normalized);
+      }
+    });
+  });
+
+  return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
 
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
 export function loadConversations(): Conversation[] {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+  const restored = getConversationCandidates();
+  if (restored.length > 0) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(restored));
+    return restored;
   }
+
+  return [];
 }
 
 export function saveConversations(convos: Conversation[]): void {
+  const existing = parseConversations(localStorage.getItem(STORAGE_KEY));
+  if (existing.length > 0) {
+    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(existing));
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(convos));
 }
 

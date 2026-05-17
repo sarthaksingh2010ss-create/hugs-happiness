@@ -26,17 +26,20 @@ export default function Index() {
   const [callMode, setCallMode] = useState<"voice" | "video">("voice");
   const [callStream, setCallStream] = useState<MediaStream | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+  const [hasLoadedConversations, setHasLoadedConversations] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loaded = loadConversations();
     setConversations(loaded);
     if (loaded.length > 0) setActiveId(loaded[0].id);
+    setHasLoadedConversations(true);
   }, []);
 
   useEffect(() => {
+    if (!hasLoadedConversations) return;
     saveConversations(conversations);
-  }, [conversations]);
+  }, [conversations, hasLoadedConversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
