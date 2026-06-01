@@ -32,10 +32,34 @@ function parseConversations(value: string | null): Conversation[] {
   try {
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
+    if (parsed.every((m) => m?.role && typeof m?.content === "string")) {
+      const messages = normalizeMessages(parsed);
+      return messages.length > 0
+        ? [{
+            id: "recovered-legacy-messages",
+            title: generateTitle(messages),
+            messages,
+            createdAt: messages[0]?.timestamp || Date.now(),
+            updatedAt: messages.at(-1)?.timestamp || Date.now(),
+          }]
+        : [];
+    }
     return parsed.filter((c) => Array.isArray(c?.messages));
   } catch {
     return [];
   }
+}
+
+function normalizeMessages(messages: Partial<Message>[]): Message[] {
+  return messages
+    .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .map((m) => ({
+      id: m.id || generateId(),
+      role: m.role as "user" | "assistant",
+      content: m.content || "",
+      timestamp: m.timestamp || Date.now(),
+      attachments: m.attachments,
+    }));
 }
 
 function getConversationCandidates(): Conversation[] {
@@ -48,12 +72,14 @@ function getConversationCandidates(): Conversation[] {
   const byId = new Map<string, Conversation>();
   keys.forEach((key) => {
     parseConversations(localStorage.getItem(key)).forEach((conversation) => {
+      const messages = normalizeMessages(conversation.messages);
+      if (messages.length === 0) return;
       const normalized: Conversation = {
         id: conversation.id || generateId(),
-        title: conversation.title || generateTitle(conversation.messages),
-        messages: conversation.messages,
-        createdAt: conversation.createdAt || conversation.messages[0]?.timestamp || Date.now(),
-        updatedAt: conversation.updatedAt || conversation.messages.at(-1)?.timestamp || Date.now(),
+        title: conversation.title || generateTitle(messages),
+        messages,
+        createdAt: conversation.createdAt || messages[0]?.timestamp || Date.now(),
+        updatedAt: conversation.updatedAt || messages.at(-1)?.timestamp || Date.now(),
       };
       const existing = byId.get(normalized.id);
       if (!existing || normalized.messages.length > existing.messages.length) {
