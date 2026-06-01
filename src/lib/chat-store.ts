@@ -240,12 +240,27 @@ function getConversationCandidates(): Conversation[] {
   return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+function createProjectHistoryConversation(): Conversation {
+  return {
+    id: PROJECT_HISTORY_CONVERSATION_ID,
+    title: "Recovered JSR AI project history",
+    messages: PROJECT_HISTORY_MESSAGES,
+    createdAt: PROJECT_HISTORY_MESSAGES[0].timestamp,
+    updatedAt: PROJECT_HISTORY_MESSAGES.at(-1)?.timestamp || Date.now(),
+  };
+}
+
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
 export function loadConversations(): Conversation[] {
   const restored = getConversationCandidates();
+  const hasProjectHistory = restored.some((c) => c.id === PROJECT_HISTORY_CONVERSATION_ID);
+  if (!hasProjectHistory && localStorage.getItem(PROJECT_HISTORY_SEED_KEY) !== "true") {
+    restored.unshift(createProjectHistoryConversation());
+    localStorage.setItem(PROJECT_HISTORY_SEED_KEY, "true");
+  }
   if (restored.length > 0) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
     localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(restored));
