@@ -151,7 +151,7 @@ async function generateImage(prompt: string, apiKey: string): Promise<Attachment
   try {
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "jsr-ai-edge", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-image-preview",
         messages: [{ role: "user", content: prompt }],
@@ -243,7 +243,7 @@ serve(async (req) => {
 
     const callLovable = () => fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+      headers: { "Lovable-API-Key": LOVABLE_API_KEY, "X-Lovable-AIG-SDK": "jsr-ai-edge", "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, ...transformed],

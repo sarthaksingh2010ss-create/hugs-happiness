@@ -27,6 +27,10 @@ export async function streamChat({
       Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
     },
     body: JSON.stringify({ messages }),
+  }).catch(() => {
+    const errorMsg = "Backend paused/unreachable hai. Lovable Cloud resume hote hi JSR AI response dene lagega.";
+    toast({ variant: "destructive", title: "AI offline", description: errorMsg });
+    throw new Error(errorMsg);
   });
 
   if (!resp.ok) {
