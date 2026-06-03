@@ -1,15 +1,20 @@
 {
   "manifest_version": 3,
-  "name": "JSR AI SUPREME ADAPTIVE",
-  "version": "60.0",
-  "description": "7 Days / 7 Crore Target. Autonomous AI Engine.",
-  "permissions": ["tabs", "scripting", "storage", "alarms", "webNavigation", "cookies", "unlimitedStorage"],
+  "name": "JSR AI Autonomous Agent",
+  "version": "61.0",
+  "description": "JSR AI's hands on the browser. Executes action plans on any website.",
+  "permissions": ["tabs", "scripting", "storage", "alarms", "webNavigation", "cookies", "activeTab"],
   "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JSR AI Agent"
+  },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["crypto-js.min.js", "content.js"]
+    "js": ["executor.js"],
+    "run_at": "document_idle"
   }]
 }
