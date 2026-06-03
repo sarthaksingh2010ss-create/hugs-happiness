@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  body { width: 360px; margin: 0; padding: 14px; font-family: -apple-system, system-ui, sans-serif; background: #0f0f1a; color: #e5e7eb; }
+  h1 { font-size: 14px; margin: 0 0 8px; color: #a78bfa; letter-spacing: .5px; }
+  p { font-size: 11px; margin: 0 0 8px; color: #9ca3af; line-height: 1.4; }
+  textarea { width: 100%; height: 180px; box-sizing: border-box; background: #1a1a2e; color: #e5e7eb; border: 1px solid #2d2d44; border-radius: 8px; padding: 8px; font-family: ui-monospace, monospace; font-size: 11px; resize: vertical; }
+  .row { display: flex; gap: 6px; margin-top: 8px; }
+  button { flex: 1; padding: 8px; border: 0; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; }
+  .run { background: linear-gradient(135deg, #7c3aed, #ec4899); color: white; }
+  .clear { background: #2d2d44; color: #e5e7eb; }
+  #status { margin-top: 8px; font-size: 11px; color: #34d399; min-height: 16px; }
+  #status.err { color: #f87171; }
+  details { margin-top: 8px; font-size: 11px; color: #9ca3af; }
+  code { background: #1a1a2e; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
+</style>
+</head>
+<body>
+  <h1>⚡ JSR AI AGENT</h1>
+  <p>JSR AI ka diya hua action plan yahan paste karein, "Run" dabayein.</p>
+  <textarea id="plan" placeholder='{"url":"https://example.com","steps":[{"action":"fill","selector":"input[name=q]","value":"hello"},{"action":"click","selector":"button[type=submit]"}]}'></textarea>
+  <div class="row">
+    <button class="run" id="run">▶ Run Plan</button>
+    <button class="clear" id="clear">Clear</button>
+  </div>
+  <div id="status"></div>
+  <details>
+    <summary>Supported actions</summary>
+    <p><code>navigate</code> · <code>fill</code> · <code>click</code> · <code>wait</code> (ms) · <code>waitForSelector</code> · <code>extract</code> (returns text) · <code>scroll</code> · <code>press</code> (key)</p>
+  </details>
+  <script src="popup.js"></script>
+</body>
+</html>
