@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JSR AI Autonomous Agent",
-  "version": "62.0",
+  "version": "63.0",
   "description": "JSR AI's hands on the browser. One-click runs action plans from the JSR AI chat on any website.",
   "permissions": ["tabs", "scripting", "storage", "alarms", "webNavigation", "cookies", "activeTab"],
   "host_permissions": ["<all_urls>"],

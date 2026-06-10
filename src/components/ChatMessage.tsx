@@ -1,7 +1,9 @@
-import { Bot, User, FileText, Download, Play, Zap } from "lucide-react";
+import { Bot, User, FileText, Download, Zap } from "lucide-react";
 import { Message } from "@/lib/chat-store";
 import ReactMarkdown from "react-markdown";
 import { toast } from "@/hooks/use-toast";
+import { useState } from "react";
+import { motion } from "framer-motion";
 
 function extractJsrPlans(content: string): string[] {
   const plans: string[] = [];
@@ -11,28 +13,31 @@ function extractJsrPlans(content: string): string[] {
   return plans;
 }
 
-function runPlanInExtension(planJson: string) {
+function runPlanInExtension(planJson: string, onResult: (r: any) => void) {
   try {
     const plan = JSON.parse(planJson);
-    window.postMessage({ type: "JSR_RUN_PLAN", plan, source: "jsr-ai-web" }, "*");
-    toast({ title: "▶ Plan sent to JSR AI Agent", description: "Extension naya tab kholega aur plan run karega." });
-    // Fallback: if extension not installed, no listener will respond. Detect with a short timer.
     let acked = false;
-    const ackListener = (e: MessageEvent) => {
-      if (e.data?.type === "JSR_PLAN_ACK") { acked = true; window.removeEventListener("message", ackListener); }
+    const listener = (e: MessageEvent) => {
+      if (e.source !== window) return;
+      if (e.data?.type === "JSR_PLAN_ACK") acked = true;
+      if (e.data?.type === "JSR_PLAN_RESULT") {
+        window.removeEventListener("message", listener);
+        onResult(e.data.result);
+      }
     };
-    window.addEventListener("message", ackListener);
+    window.addEventListener("message", listener);
+    window.postMessage({ type: "JSR_RUN_PLAN", plan, source: "jsr-ai-web" }, "*");
+    toast({ title: "▶ Plan sent to JSR AI Agent", description: "Naya tab khulega aur plan run hoga." });
     setTimeout(() => {
       if (!acked) {
-        toast({ variant: "destructive", title: "Extension not detected", description: "JSR AI Agent extension install/enable karo, phir try karo." });
+        window.removeEventListener("message", listener);
+        toast({ variant: "destructive", title: "Extension not detected", description: "JSR AI Agent extension install/enable karo, phir page reload karke try karo." });
       }
-      window.removeEventListener("message", ackListener);
     }, 1500);
   } catch (e: any) {
     toast({ variant: "destructive", title: "Invalid plan JSON", description: e.message });
   }
 }
-import { motion } from "framer-motion";
 
 interface ChatMessageProps {
   message: Message;
@@ -46,6 +51,7 @@ function formatSize(b: number) {
 
 export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const [planResults, setPlanResults] = useState<Record<number, any>>({});
 
   return (
     <motion.div
@@ -107,13 +113,33 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         )}
 
         {!isUser && message.content && extractJsrPlans(message.content).map((plan, i) => (
-          <button
-            key={i}
-            onClick={() => runPlanInExtension(plan)}
-            className="mt-2 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-semibold shadow-lg shadow-primary/20"
-          >
-            <Zap size={14} /> Run with JSR AI Agent
-          </button>
+          <div key={i} className="mt-2 space-y-2">
+            <button
+              onClick={() => runPlanInExtension(plan, (r) => setPlanResults((p) => ({ ...p, [i]: r })))}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-semibold shadow-lg shadow-primary/20"
+            >
+              <Zap size={14} /> Run with JSR AI Agent
+            </button>
+            {planResults[i] && (
+              <div className="rounded-lg border border-border bg-secondary/50 p-3 text-xs">
+                <div className="font-semibold mb-1 text-primary">
+                  {planResults[i].ok ? "✓ Plan completed" : "✗ Plan failed"}
+                </div>
+                {planResults[i].extracted?.length > 0 && (
+                  <div className="mb-2">
+                    <div className="text-muted-foreground mb-1">Extracted:</div>
+                    {planResults[i].extracted.map((t: string, k: number) => (
+                      <pre key={k} className="whitespace-pre-wrap break-words bg-background/60 rounded p-2 mb-1 text-[11px]">{t}</pre>
+                    ))}
+                  </div>
+                )}
+                <details>
+                  <summary className="cursor-pointer text-muted-foreground">Step log</summary>
+                  <pre className="whitespace-pre-wrap break-words text-[10px] mt-1">{JSON.stringify(planResults[i].results || planResults[i].error, null, 2)}</pre>
+                </details>
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </motion.div>
