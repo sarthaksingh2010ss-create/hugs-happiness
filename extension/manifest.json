@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "JSR AI Autonomous Agent",
-  "version": "61.0",
-  "description": "JSR AI's hands on the browser. Executes action plans on any website.",
+  "version": "62.0",
+  "description": "JSR AI's hands on the browser. One-click runs action plans from the JSR AI chat on any website.",
   "permissions": ["tabs", "scripting", "storage", "alarms", "webNavigation", "cookies", "activeTab"],
   "host_permissions": ["<all_urls>"],
   "action": {
@@ -12,9 +12,22 @@
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["executor.js"],
-    "run_at": "document_idle"
-  }]
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["executor.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.lovable.app/*",
+        "*://*.lovable.dev/*",
+        "http://localhost/*",
+        "http://localhost:*/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
 }

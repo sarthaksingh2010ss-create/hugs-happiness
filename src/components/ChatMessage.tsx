@@ -1,6 +1,37 @@
-import { Bot, User, FileText, Download } from "lucide-react";
+import { Bot, User, FileText, Download, Play, Zap } from "lucide-react";
 import { Message } from "@/lib/chat-store";
 import ReactMarkdown from "react-markdown";
+import { toast } from "@/hooks/use-toast";
+
+function extractJsrPlans(content: string): string[] {
+  const plans: string[] = [];
+  const re = /```jsr-plan\s*\n([\s\S]*?)```/g;
+  let m;
+  while ((m = re.exec(content)) !== null) plans.push(m[1].trim());
+  return plans;
+}
+
+function runPlanInExtension(planJson: string) {
+  try {
+    const plan = JSON.parse(planJson);
+    window.postMessage({ type: "JSR_RUN_PLAN", plan, source: "jsr-ai-web" }, "*");
+    toast({ title: "▶ Plan sent to JSR AI Agent", description: "Extension naya tab kholega aur plan run karega." });
+    // Fallback: if extension not installed, no listener will respond. Detect with a short timer.
+    let acked = false;
+    const ackListener = (e: MessageEvent) => {
+      if (e.data?.type === "JSR_PLAN_ACK") { acked = true; window.removeEventListener("message", ackListener); }
+    };
+    window.addEventListener("message", ackListener);
+    setTimeout(() => {
+      if (!acked) {
+        toast({ variant: "destructive", title: "Extension not detected", description: "JSR AI Agent extension install/enable karo, phir try karo." });
+      }
+      window.removeEventListener("message", ackListener);
+    }, 1500);
+  } catch (e: any) {
+    toast({ variant: "destructive", title: "Invalid plan JSON", description: e.message });
+  }
+}
 import { motion } from "framer-motion";
 
 interface ChatMessageProps {
@@ -74,6 +105,16 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         )}
+
+        {!isUser && message.content && extractJsrPlans(message.content).map((plan, i) => (
+          <button
+            key={i}
+            onClick={() => runPlanInExtension(plan)}
+            className="mt-2 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-semibold shadow-lg shadow-primary/20"
+          >
+            <Zap size={14} /> Run with JSR AI Agent
+          </button>
+        ))}
       </div>
     </motion.div>
   );
