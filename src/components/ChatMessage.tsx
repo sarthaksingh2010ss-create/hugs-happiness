@@ -105,6 +105,16 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
         )}
+
+        {!isUser && message.content && extractJsrPlans(message.content).map((plan, i) => (
+          <button
+            key={i}
+            onClick={() => runPlanInExtension(plan)}
+            className="mt-2 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-xs font-semibold shadow-lg shadow-primary/20"
+          >
+            <Zap size={14} /> Run with JSR AI Agent
+          </button>
+        ))}
       </div>
     </motion.div>
   );
