@@ -181,7 +181,108 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "github",
+      description: "Full GitHub access using Sarthak's PAT. Any GitHub action: list/create/fork/star/delete repos, read/write/delete files (auto-commits), branches, pull requests, issues, comments, commits, code search, workflows, releases. Use whenever user asks about GitHub repos, code, PRs, issues, or to push/edit code.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["list_repos","get_repo","create_repo","delete_repo","fork_repo","star_repo","unstar_repo","list_files","read_file","write_file","delete_file","list_branches","create_branch","delete_branch","list_commits","get_commit","list_prs","create_pr","get_pr","merge_pr","close_pr","comment_pr","list_issues","create_issue","get_issue","close_issue","comment_issue","search_code","search_repos","list_workflows","run_workflow","list_workflow_runs","list_releases","create_release","get_user","raw"], description: "Which GitHub action to perform." },
+          repo: { type: "string", description: "owner/repo, e.g. 'sarthak/myapp'." },
+          path: { type: "string", description: "File path inside repo." },
+          content: { type: "string", description: "File content for write_file." },
+          message: { type: "string", description: "Commit message / PR title / issue title." },
+          body: { type: "string", description: "PR/issue body or comment body (markdown)." },
+          branch: { type: "string", description: "Branch name." },
+          base: { type: "string", description: "Base branch (default main)." },
+          head: { type: "string", description: "Head branch for create_pr." },
+          number: { type: "number", description: "PR / issue number." },
+          query: { type: "string", description: "Search query." },
+          name: { type: "string", description: "Repo name / release name." },
+          private: { type: "boolean", description: "Private repo?" },
+          description: { type: "string", description: "Description text." },
+          workflow_id: { type: "string", description: "Workflow file like 'ci.yml'." },
+          tag: { type: "string", description: "Release tag." },
+          method: { type: "string", description: "HTTP method for 'raw'." },
+          endpoint: { type: "string", description: "API endpoint for 'raw', e.g. '/user/repos'." },
+          payload: { type: "object", description: "JSON body for 'raw'.", additionalProperties: true },
+        },
+        required: ["action"],
+      },
+    },
+  },
 ];
+
+const GH_API = "https://api.github.com";
+async function ghFetch(token: string, path: string, init: RequestInit = {}) {
+  const url = path.startsWith("http") ? path : `${GH_API}${path.startsWith("/") ? path : "/" + path}`;
+  const r = await fetch(url, {
+    ...init,
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "JSR-AI-Agent",
+      "Content-Type": "application/json",
+      ...(init.headers || {}),
+    },
+  });
+  const txt = await r.text();
+  let data: any = null;
+  try { data = txt ? JSON.parse(txt) : null; } catch { data = txt; }
+  return { ok: r.ok, status: r.status, data };
+}
+
+async function toolGithub(args: any, token: string): Promise<string> {
+  if (!token) return "❌ GITHUB_PAT secret missing.";
+  const a = args.action as string;
+  const repo = args.repo as string | undefined;
+  const split = () => {
+    if (!repo || !repo.includes("/")) throw new Error("repo must be 'owner/name'");
+    const [o, n] = repo.split("/"); return { owner: o, name: n };
+  };
+  try {
+    switch (a) {
+      case "get_user": { const r = await ghFetch(token, "/user"); return JSON.stringify({ login: r.data?.login, name: r.data?.name, public_repos: r.data?.public_repos }); }
+      case "list_repos": { const r = await ghFetch(token, "/user/repos?per_page=100&sort=updated"); return JSON.stringify((r.data||[]).map((x:any)=>({name:x.full_name,private:x.private,url:x.html_url,updated:x.updated_at}))); }
+      case "get_repo": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}`); return JSON.stringify({name:r.data?.full_name,desc:r.data?.description,stars:r.data?.stargazers_count,default_branch:r.data?.default_branch,url:r.data?.html_url}); }
+      case "create_repo": { const r=await ghFetch(token,"/user/repos",{method:"POST",body:JSON.stringify({name:args.name,description:args.description??"",private:!!args.private,auto_init:true})}); return r.ok?`✅ ${r.data?.html_url}`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "delete_repo": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}`,{method:"DELETE"}); return r.ok?`✅ Deleted`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "fork_repo": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/forks`,{method:"POST"}); return r.ok?`✅ ${r.data?.html_url}`:`❌ ${r.status}`; }
+      case "star_repo": case "unstar_repo": { const {owner,name}=split(); const r=await ghFetch(token,`/user/starred/${owner}/${name}`,{method:a==="star_repo"?"PUT":"DELETE"}); return r.ok?`✅ ${a}`:`❌ ${r.status}`; }
+      case "list_files": { const {owner,name}=split(); const p=args.path??""; const r=await ghFetch(token,`/repos/${owner}/${name}/contents/${p}${args.branch?`?ref=${args.branch}`:""}`); if(!r.ok) return `❌ ${r.status}`; return JSON.stringify((Array.isArray(r.data)?r.data:[r.data]).map((x:any)=>({name:x.name,path:x.path,type:x.type,size:x.size}))); }
+      case "read_file": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/contents/${args.path}${args.branch?`?ref=${args.branch}`:""}`); if(!r.ok) return `❌ ${r.status}`; try{const d=atob((r.data?.content||"").replace(/\n/g,"")); return d.length>8000?d.slice(0,8000)+"\n…[truncated]":d;}catch{return JSON.stringify(r.data).slice(0,4000);} }
+      case "write_file": { const {owner,name}=split(); const cur=await ghFetch(token,`/repos/${owner}/${name}/contents/${args.path}${args.branch?`?ref=${args.branch}`:""}`); const sha=cur.ok?cur.data?.sha:undefined; const body:any={message:args.message??`Update ${args.path} via JSR AI`,content:btoa(unescape(encodeURIComponent(args.content??"")))}; if(sha) body.sha=sha; if(args.branch) body.branch=args.branch; const r=await ghFetch(token,`/repos/${owner}/${name}/contents/${args.path}`,{method:"PUT",body:JSON.stringify(body)}); return r.ok?`✅ Committed: ${r.data?.commit?.html_url}`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "delete_file": { const {owner,name}=split(); const cur=await ghFetch(token,`/repos/${owner}/${name}/contents/${args.path}${args.branch?`?ref=${args.branch}`:""}`); if(!cur.ok) return `❌ Not found`; const r=await ghFetch(token,`/repos/${owner}/${name}/contents/${args.path}`,{method:"DELETE",body:JSON.stringify({message:args.message??`Delete ${args.path}`,sha:cur.data?.sha,branch:args.branch})}); return r.ok?`✅ Deleted`:`❌ ${r.status}`; }
+      case "list_branches": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/branches?per_page=100`); return JSON.stringify((r.data||[]).map((b:any)=>b.name)); }
+      case "create_branch": { const {owner,name}=split(); const base=args.base??"main"; const ref=await ghFetch(token,`/repos/${owner}/${name}/git/ref/heads/${base}`); if(!ref.ok) return `❌ Base not found`; const r=await ghFetch(token,`/repos/${owner}/${name}/git/refs`,{method:"POST",body:JSON.stringify({ref:`refs/heads/${args.branch}`,sha:ref.data?.object?.sha})}); return r.ok?`✅ Branch ${args.branch} created`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "delete_branch": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/git/refs/heads/${args.branch}`,{method:"DELETE"}); return r.ok?`✅ Deleted`:`❌ ${r.status}`; }
+      case "list_commits": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/commits?per_page=20${args.branch?`&sha=${args.branch}`:""}`); return JSON.stringify((r.data||[]).map((c:any)=>({sha:c.sha?.slice(0,7),msg:c.commit?.message?.split("\n")[0],author:c.commit?.author?.name,date:c.commit?.author?.date}))); }
+      case "get_commit": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/commits/${args.branch??"HEAD"}`); return JSON.stringify({sha:r.data?.sha,msg:r.data?.commit?.message,files:(r.data?.files||[]).map((f:any)=>({path:f.filename,changes:f.changes}))}).slice(0,6000); }
+      case "list_prs": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/pulls?state=all&per_page=30`); return JSON.stringify((r.data||[]).map((p:any)=>({num:p.number,title:p.title,state:p.state,url:p.html_url}))); }
+      case "create_pr": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/pulls`,{method:"POST",body:JSON.stringify({title:args.message,body:args.body??"",head:args.head,base:args.base??"main"})}); return r.ok?`✅ PR #${r.data?.number}: ${r.data?.html_url}`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "get_pr": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/pulls/${args.number}`); return JSON.stringify({num:r.data?.number,title:r.data?.title,state:r.data?.state,body:r.data?.body,url:r.data?.html_url}); }
+      case "merge_pr": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/pulls/${args.number}/merge`,{method:"PUT",body:JSON.stringify({commit_title:args.message})}); return r.ok?`✅ Merged #${args.number}`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "close_pr": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/pulls/${args.number}`,{method:"PATCH",body:JSON.stringify({state:"closed"})}); return r.ok?`✅ Closed`:`❌ ${r.status}`; }
+      case "comment_pr": case "comment_issue": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/issues/${args.number}/comments`,{method:"POST",body:JSON.stringify({body:args.body??args.message})}); return r.ok?`✅ ${r.data?.html_url}`:`❌ ${r.status}`; }
+      case "list_issues": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/issues?state=all&per_page=30`); return JSON.stringify((r.data||[]).filter((i:any)=>!i.pull_request).map((i:any)=>({num:i.number,title:i.title,state:i.state,url:i.html_url}))); }
+      case "create_issue": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/issues`,{method:"POST",body:JSON.stringify({title:args.message,body:args.body??""})}); return r.ok?`✅ Issue #${r.data?.number}: ${r.data?.html_url}`:`❌ ${r.status}`; }
+      case "get_issue": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/issues/${args.number}`); return JSON.stringify({num:r.data?.number,title:r.data?.title,body:r.data?.body,state:r.data?.state}); }
+      case "close_issue": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/issues/${args.number}`,{method:"PATCH",body:JSON.stringify({state:"closed"})}); return r.ok?`✅ Closed`:`❌ ${r.status}`; }
+      case "search_code": { const r=await ghFetch(token,`/search/code?q=${encodeURIComponent(args.query)}${repo?`+repo:${repo}`:""}&per_page=15`); return JSON.stringify((r.data?.items||[]).map((i:any)=>({path:i.path,repo:i.repository?.full_name,url:i.html_url}))); }
+      case "search_repos": { const r=await ghFetch(token,`/search/repositories?q=${encodeURIComponent(args.query)}&per_page=15`); return JSON.stringify((r.data?.items||[]).map((i:any)=>({name:i.full_name,stars:i.stargazers_count,desc:i.description,url:i.html_url}))); }
+      case "list_workflows": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/actions/workflows`); return JSON.stringify((r.data?.workflows||[]).map((w:any)=>({id:w.id,name:w.name,file:w.path,state:w.state}))); }
+      case "run_workflow": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/actions/workflows/${args.workflow_id}/dispatches`,{method:"POST",body:JSON.stringify({ref:args.branch??"main"})}); return r.ok?`✅ Triggered ${args.workflow_id}`:`❌ ${r.status}: ${JSON.stringify(r.data)}`; }
+      case "list_workflow_runs": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/actions/runs?per_page=15`); return JSON.stringify((r.data?.workflow_runs||[]).map((w:any)=>({id:w.id,name:w.name,status:w.status,conclusion:w.conclusion,url:w.html_url}))); }
+      case "list_releases": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/releases?per_page=15`); return JSON.stringify((r.data||[]).map((x:any)=>({tag:x.tag_name,name:x.name,url:x.html_url}))); }
+      case "create_release": { const {owner,name}=split(); const r=await ghFetch(token,`/repos/${owner}/${name}/releases`,{method:"POST",body:JSON.stringify({tag_name:args.tag,name:args.name??args.tag,body:args.body??""})}); return r.ok?`✅ ${r.data?.html_url}`:`❌ ${r.status}`; }
+      case "raw": { const r=await ghFetch(token,args.endpoint,{method:args.method??"GET",body:args.payload?JSON.stringify(args.payload):undefined}); return JSON.stringify(r.data).slice(0,6000); }
+      default: return `❌ Unknown action: ${a}`;
+    }
+  } catch(e) { return `❌ GitHub error: ${(e as Error).message}`; }
+}
 
 async function toolWebSearch(query: string, n = 5): Promise<string> {
   try {
