@@ -435,7 +435,7 @@ serve(async (req) => {
 
         try {
           // Autonomous tool loop (max 6 steps)
-          for (let step = 0; step < 6; step++) {
+          for (let step = 0; step < 12; step++) {
             const resp = await callModel(false);
             if (!resp) { sendText("Koi AI provider key configured nahi hai."); break; }
             if (!resp.ok) {
