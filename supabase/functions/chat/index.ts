@@ -481,6 +481,9 @@ serve(async (req) => {
                 const att = toolGenerateFile(String(args.filename ?? "file.txt"), String(args.content ?? ""));
                 sendAttachment(att); collectedAttachments.push(att);
                 result = `File ${args.filename} created and attached.`;
+              } else if (name === "github") {
+                sendText(`\n\n🐙 *GitHub: ${args.action}${args.repo ? ` on ${args.repo}` : ""}*\n\n`);
+                result = await toolGithub(args, GITHUB_PAT);
               } else {
                 result = `Unknown tool: ${name}`;
               }
