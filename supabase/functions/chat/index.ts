@@ -218,6 +218,21 @@ const TOOLS = [
         required: ["action"],
       },
     },
+  {
+    type: "function",
+    function: {
+      name: "steel_browser",
+      description: "Cloud headless Chromium browser via Steel (steel.dev). Fully renders JS/SPA pages, screenshots, PDFs. Use when fetch_url is not enough (dynamic/JS-heavy sites) or the user asks to browse / screenshot / render a page.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["scrape", "screenshot", "pdf"], description: "scrape = rendered text+markdown; screenshot = PNG attachment; pdf = PDF attachment." },
+          url: { type: "string", description: "Full http(s) URL to load." },
+          full_page: { type: "boolean", description: "For screenshot: capture full scrollable page (default true)." },
+        },
+        required: ["action", "url"],
+      },
+    },
   },
 ];
 
