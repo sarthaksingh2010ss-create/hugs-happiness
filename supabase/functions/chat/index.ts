@@ -534,6 +534,11 @@ serve(async (req) => {
     const GROQ_API_KEY = sanitizeGroq(Deno.env.get("GROQ_API_KEY"));
     const GITHUB_PAT = Deno.env.get("GITHUB_PAT")?.trim() ?? "";
     const STEEL_API_KEY = Deno.env.get("STEEL_API_KEY")?.trim() ?? "";
+    const STEALTH_KEYS = {
+      zenrows: Deno.env.get("ZENROWS_API_KEY")?.trim() ?? "",
+      scrapingbee: Deno.env.get("SCRAPINGBEE_API_KEY")?.trim() ?? "",
+      scraperapi: Deno.env.get("SCRAPERAPI_KEY")?.trim() ?? "",
+    };
 
     const initial = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
     const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...initial];
