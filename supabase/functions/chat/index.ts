@@ -650,6 +650,9 @@ serve(async (req) => {
                 const out = await toolSteelBrowser(args, STEEL_API_KEY);
                 if (out.attachment) { sendAttachment(out.attachment); collectedAttachments.push(out.attachment); }
                 result = out.text;
+              } else if (name === "stealth_scrape") {
+                sendText(`\n\n🛡️ *Stealth scrape (${args.provider ?? "auto"}): ${args.url}*\n\n`);
+                result = await toolStealthScrape(args, STEALTH_KEYS);
               } else {
                 result = `Unknown tool: ${name}`;
               }
