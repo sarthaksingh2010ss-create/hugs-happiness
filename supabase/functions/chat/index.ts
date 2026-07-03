@@ -385,6 +385,57 @@ function toolGenerateFile(name: string, content: string): Attachment {
   return { type: "file", name, mimeType: mime, dataUrl: `data:${mime};base64,${b64}`, size: new TextEncoder().encode(content).length };
 }
 
+async function toolSteelBrowser(args: any, apiKey: string): Promise<{ text: string; attachment?: Attachment }> {
+  if (!apiKey) return { text: "❌ STEEL_API_KEY missing." };
+  const action = args.action as string;
+  const url = String(args.url ?? "");
+  if (!url) return { text: "❌ url required." };
+  const base = "https://api.steel.dev/v1";
+  const headers = { "Steel-Api-Key": apiKey, "Content-Type": "application/json" };
+  try {
+    if (action === "scrape") {
+      const r = await fetch(`${base}/scrape`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url, format: ["markdown", "cleaned_html"] }),
+      });
+      if (!r.ok) return { text: `❌ Steel scrape ${r.status}: ${(await r.text()).slice(0, 300)}` };
+      const j = await r.json();
+      const md = j.content?.markdown ?? j.markdown ?? j.content?.cleaned_html ?? JSON.stringify(j).slice(0, 4000);
+      return { text: md.length > 9000 ? md.slice(0, 9000) + "\n…[truncated]" : md };
+    }
+    if (action === "screenshot") {
+      const r = await fetch(`${base}/screenshot`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url, fullPage: args.full_page !== false }),
+      });
+      if (!r.ok) return { text: `❌ Steel screenshot ${r.status}: ${(await r.text()).slice(0, 300)}` };
+      const buf = new Uint8Array(await r.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const b64 = btoa(bin);
+      const att: Attachment = { type: "image", name: `steel-${Date.now()}.png`, mimeType: "image/png", dataUrl: `data:image/png;base64,${b64}`, size: buf.length };
+      return { text: `✅ Screenshot captured (${(buf.length / 1024).toFixed(1)} KB)`, attachment: att };
+    }
+    if (action === "pdf") {
+      const r = await fetch(`${base}/pdf`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url }),
+      });
+      if (!r.ok) return { text: `❌ Steel pdf ${r.status}: ${(await r.text()).slice(0, 300)}` };
+      const buf = new Uint8Array(await r.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const b64 = btoa(bin);
+      const att: Attachment = { type: "file", name: `steel-${Date.now()}.pdf`, mimeType: "application/pdf", dataUrl: `data:application/pdf;base64,${b64}`, size: buf.length };
+      return { text: `✅ PDF captured (${(buf.length / 1024).toFixed(1)} KB)`, attachment: att };
+    }
+    return { text: `❌ Unknown action: ${action}` };
+  } catch (e) {
+    return { text: `❌ Steel error: ${(e as Error).message}` };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
