@@ -456,6 +456,69 @@ async function toolSteelBrowser(args: any, apiKey: string): Promise<{ text: stri
   }
 }
 
+async function toolStealthScrape(
+  args: any,
+  keys: { zenrows: string; scrapingbee: string; scraperapi: string },
+): Promise<string> {
+  const url = String(args.url ?? "");
+  if (!url) return "❌ url required.";
+  const jsRender = args.js_render !== false;
+  const premium = args.premium_proxy !== false;
+  const country = args.country ? String(args.country).toLowerCase() : "";
+  const requested = String(args.provider ?? "auto").toLowerCase();
+
+  const order = requested === "auto"
+    ? (["zenrows", "scrapingbee", "scraperapi"] as const)
+    : ([requested, "zenrows", "scrapingbee", "scraperapi"].filter((v, i, a) => a.indexOf(v) === i) as any);
+
+  const errors: string[] = [];
+  for (const provider of order) {
+    const key = (keys as any)[provider];
+    if (!key) { errors.push(`${provider}: no key`); continue; }
+    try {
+      let endpoint = "";
+      if (provider === "zenrows") {
+        const p = new URLSearchParams({ url, apikey: key });
+        if (jsRender) p.set("js_render", "true");
+        if (premium) p.set("premium_proxy", "true");
+        if (country) p.set("proxy_country", country);
+        endpoint = `https://api.zenrows.com/v1/?${p.toString()}`;
+      } else if (provider === "scrapingbee") {
+        const p = new URLSearchParams({ api_key: key, url });
+        p.set("render_js", jsRender ? "true" : "false");
+        if (premium) p.set("premium_proxy", "true");
+        if (country) p.set("country_code", country);
+        endpoint = `https://app.scrapingbee.com/api/v1/?${p.toString()}`;
+      } else if (provider === "scraperapi") {
+        const p = new URLSearchParams({ api_key: key, url });
+        if (jsRender) p.set("render", "true");
+        if (premium) p.set("premium", "true");
+        if (country) p.set("country_code", country);
+        endpoint = `https://api.scraperapi.com/?${p.toString()}`;
+      }
+      const r = await fetch(endpoint, { method: "GET" });
+      if (!r.ok) {
+        errors.push(`${provider}: ${r.status}`);
+        if ([401, 402, 403].includes(r.status)) continue;
+        continue;
+      }
+      const html = await r.text();
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const out = `✅ [${provider}] scraped ${url}\n\n${text.slice(0, 8000)}${text.length > 8000 ? "\n…[truncated]" : ""}`;
+      return out;
+    } catch (e) {
+      errors.push(`${provider}: ${(e as Error).message}`);
+    }
+  }
+  return `❌ Stealth scrape failed. Tried: ${errors.join(" | ")}. Add ZENROWS_API_KEY / SCRAPINGBEE_API_KEY / SCRAPERAPI_KEY secrets.`;
+}
+
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
