@@ -98,8 +98,11 @@ LONG-TERM MEMORY WITH SARTHAK:
 - Old localStorage chats may be lost; rely on this memory and continue the relationship.
 - He uses Hinglish often. Be warm, witty, helpful.
 
-🐙 GITHUB FULL ACCESS (NEW):
-You have Sarthak's GitHub Personal Access Token via the \`github\` tool. You can do ANYTHING on his GitHub: list/create/delete/fork repos, read/write/delete files (auto-commits!), branches, pull requests, issues, comments, search code across all his repos, run workflows, create releases. Use the \`github\` tool PROACTIVELY whenever he mentions GitHub, repos, code, commits, PRs, issues, "push this", "create repo", "edit file in repo X", etc. Chain multiple calls (e.g. list_repos → read_file → write_file → create_pr). Always confirm destructive actions (delete_repo, delete_file, merge_pr) before doing them unless he was explicit.
+🐙 GITHUB FULL ACCESS:
+You have Sarthak's GitHub Personal Access Token via the \`github\` tool. You can do ANYTHING on his GitHub: list/create/delete/fork repos, read/write/delete files (auto-commits!), branches, pull requests, issues, comments, search code across all his repos, run workflows, create releases. Use the \`github\` tool PROACTIVELY whenever he mentions GitHub, repos, code, commits, PRs, issues, "push this", "create repo", "edit file in repo X", etc. Chain multiple calls. Confirm destructive actions unless he was explicit.
+
+🌐 STEEL BROWSER (CLOUD HEADLESS BROWSER — NEW):
+Sarthak added Steel (steel.dev) — you now command a real cloud Chromium browser via the \`steel_browser\` tool. Unlike \`fetch_url\` (static HTML only), Steel runs full JS, handles SPAs (React/Vue/Twitter/LinkedIn), and can screenshot pages. Actions: \`scrape\` (url → fully-rendered text/markdown), \`screenshot\` (url → PNG attachment), \`pdf\` (url → PDF attachment). Use it when a page is JS-heavy, fetch_url returned empty content, or user says "browse", "open", "screenshot", "render this page". Prefer fetch_url for simple static pages (cheaper).
 
 🤖 BROWSER AUTOMATION VIA JSR AI EXTENSION:
 Sarthak has a Chrome extension ("JSR AI Agent") installed. You CAN command his real browser to do things on ANY website (login, fill forms, click, scroll, extract data) by emitting an action plan in a fenced code block tagged \`jsr-plan\`:
@@ -213,6 +216,21 @@ const TOOLS = [
           payload: { type: "object", description: "JSON body for 'raw'.", additionalProperties: true },
         },
         required: ["action"],
+      },
+    },
+  {
+    type: "function",
+    function: {
+      name: "steel_browser",
+      description: "Cloud headless Chromium browser via Steel (steel.dev). Fully renders JS/SPA pages, screenshots, PDFs. Use when fetch_url is not enough (dynamic/JS-heavy sites) or the user asks to browse / screenshot / render a page.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["scrape", "screenshot", "pdf"], description: "scrape = rendered text+markdown; screenshot = PNG attachment; pdf = PDF attachment." },
+          url: { type: "string", description: "Full http(s) URL to load." },
+          full_page: { type: "boolean", description: "For screenshot: capture full scrollable page (default true)." },
+        },
+        required: ["action", "url"],
       },
     },
   },
@@ -367,6 +385,57 @@ function toolGenerateFile(name: string, content: string): Attachment {
   return { type: "file", name, mimeType: mime, dataUrl: `data:${mime};base64,${b64}`, size: new TextEncoder().encode(content).length };
 }
 
+async function toolSteelBrowser(args: any, apiKey: string): Promise<{ text: string; attachment?: Attachment }> {
+  if (!apiKey) return { text: "❌ STEEL_API_KEY missing." };
+  const action = args.action as string;
+  const url = String(args.url ?? "");
+  if (!url) return { text: "❌ url required." };
+  const base = "https://api.steel.dev/v1";
+  const headers = { "Steel-Api-Key": apiKey, "Content-Type": "application/json" };
+  try {
+    if (action === "scrape") {
+      const r = await fetch(`${base}/scrape`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url, format: ["markdown", "cleaned_html"] }),
+      });
+      if (!r.ok) return { text: `❌ Steel scrape ${r.status}: ${(await r.text()).slice(0, 300)}` };
+      const j = await r.json();
+      const md = j.content?.markdown ?? j.markdown ?? j.content?.cleaned_html ?? JSON.stringify(j).slice(0, 4000);
+      return { text: md.length > 9000 ? md.slice(0, 9000) + "\n…[truncated]" : md };
+    }
+    if (action === "screenshot") {
+      const r = await fetch(`${base}/screenshot`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url, fullPage: args.full_page !== false }),
+      });
+      if (!r.ok) return { text: `❌ Steel screenshot ${r.status}: ${(await r.text()).slice(0, 300)}` };
+      const buf = new Uint8Array(await r.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const b64 = btoa(bin);
+      const att: Attachment = { type: "image", name: `steel-${Date.now()}.png`, mimeType: "image/png", dataUrl: `data:image/png;base64,${b64}`, size: buf.length };
+      return { text: `✅ Screenshot captured (${(buf.length / 1024).toFixed(1)} KB)`, attachment: att };
+    }
+    if (action === "pdf") {
+      const r = await fetch(`${base}/pdf`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ url }),
+      });
+      if (!r.ok) return { text: `❌ Steel pdf ${r.status}: ${(await r.text()).slice(0, 300)}` };
+      const buf = new Uint8Array(await r.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const b64 = btoa(bin);
+      const att: Attachment = { type: "file", name: `steel-${Date.now()}.pdf`, mimeType: "application/pdf", dataUrl: `data:application/pdf;base64,${b64}`, size: buf.length };
+      return { text: `✅ PDF captured (${(buf.length / 1024).toFixed(1)} KB)`, attachment: att };
+    }
+    return { text: `❌ Unknown action: ${action}` };
+  } catch (e) {
+    return { text: `❌ Steel error: ${(e as Error).message}` };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -381,6 +450,7 @@ serve(async (req) => {
     };
     const GROQ_API_KEY = sanitizeGroq(Deno.env.get("GROQ_API_KEY"));
     const GITHUB_PAT = Deno.env.get("GITHUB_PAT")?.trim() ?? "";
+    const STEEL_API_KEY = Deno.env.get("STEEL_API_KEY")?.trim() ?? "";
 
     const initial = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
     const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...initial];
@@ -487,6 +557,11 @@ serve(async (req) => {
               } else if (name === "github") {
                 sendText(`\n\n🐙 *GitHub: ${args.action}${args.repo ? ` on ${args.repo}` : ""}*\n\n`);
                 result = await toolGithub(args, GITHUB_PAT);
+              } else if (name === "steel_browser") {
+                sendText(`\n\n🌐 *Steel browser: ${args.action} ${args.url}*\n\n`);
+                const out = await toolSteelBrowser(args, STEEL_API_KEY);
+                if (out.attachment) { sendAttachment(out.attachment); collectedAttachments.push(out.attachment); }
+                result = out.text;
               } else {
                 result = `Unknown tool: ${name}`;
               }
