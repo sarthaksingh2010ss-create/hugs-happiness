@@ -101,8 +101,11 @@ LONG-TERM MEMORY WITH SARTHAK:
 🐙 GITHUB FULL ACCESS:
 You have Sarthak's GitHub Personal Access Token via the \`github\` tool. You can do ANYTHING on his GitHub: list/create/delete/fork repos, read/write/delete files (auto-commits!), branches, pull requests, issues, comments, search code across all his repos, run workflows, create releases. Use the \`github\` tool PROACTIVELY whenever he mentions GitHub, repos, code, commits, PRs, issues, "push this", "create repo", "edit file in repo X", etc. Chain multiple calls. Confirm destructive actions unless he was explicit.
 
-🌐 STEEL BROWSER (CLOUD HEADLESS BROWSER — NEW):
-Sarthak added Steel (steel.dev) — you now command a real cloud Chromium browser via the \`steel_browser\` tool. Unlike \`fetch_url\` (static HTML only), Steel runs full JS, handles SPAs (React/Vue/Twitter/LinkedIn), and can screenshot pages. Actions: \`scrape\` (url → fully-rendered text/markdown), \`screenshot\` (url → PNG attachment), \`pdf\` (url → PDF attachment). Use it when a page is JS-heavy, fetch_url returned empty content, or user says "browse", "open", "screenshot", "render this page". Prefer fetch_url for simple static pages (cheaper).
+🌐 STEEL BROWSER (CLOUD HEADLESS BROWSER):
+Sarthak added Steel (steel.dev) — you command a real cloud Chromium browser via the \`steel_browser\` tool. Unlike \`fetch_url\` (static HTML only), Steel runs full JS, handles SPAs (React/Vue/Twitter/LinkedIn), and can screenshot pages. Actions: \`scrape\` (url → fully-rendered text/markdown), \`screenshot\` (url → PNG attachment), \`pdf\` (url → PDF attachment). Use it when a page is JS-heavy, fetch_url returned empty content, or user says "browse", "open", "screenshot", "render this page". Prefer fetch_url for simple static pages (cheaper).
+
+🛡️ STEALTH SCRAPER (CLOUDFLARE / ANTI-BOT BYPASS — NEW):
+Sarthak added 3 premium anti-bot scraping providers (ZenRows, ScrapingBee, ScraperAPI) via the \`stealth_scrape\` tool. Use this ONLY when a site is protected by Cloudflare, DataDome, PerimeterX, Akamai, or any bot-blocker — i.e. fetch_url returned a challenge/403/503, or Steel browser also got blocked. Params: \`provider\` ("zenrows" | "scrapingbee" | "scraperapi" — pick zenrows by default; if user names one, honor it), \`url\`, \`js_render\` (default true — runs headless JS), \`premium_proxy\` (default true — residential IP), \`country\` (2-letter code, optional). Returns clean HTML/markdown of the page. If the chosen provider's key is missing, try the next one automatically. Prefer fetch_url for simple public sites (much cheaper).
 
 🤖 BROWSER AUTOMATION VIA JSR AI EXTENSION:
 Sarthak has a Chrome extension ("JSR AI Agent") installed. You CAN command his real browser to do things on ANY website (login, fill forms, click, scroll, extract data) by emitting an action plan in a fenced code block tagged \`jsr-plan\`:
@@ -231,6 +234,23 @@ const TOOLS = [
           full_page: { type: "boolean", description: "For screenshot: capture full scrollable page (default true)." },
         },
         required: ["action", "url"],
+      },
+  },
+  {
+    type: "function",
+    function: {
+      name: "stealth_scrape",
+      description: "Anti-bot / Cloudflare bypass scraper. Uses ZenRows, ScrapingBee, or ScraperAPI (residential proxies + stealth headless browser) to fetch pages that block normal requests. Use when fetch_url or steel_browser return a challenge / 403 / 503 / Cloudflare block. Returns rendered HTML + extracted text.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Full http(s) URL to scrape." },
+          provider: { type: "string", enum: ["zenrows", "scrapingbee", "scraperapi", "auto"], description: "Which provider (default 'auto' — tries whichever key is configured)." },
+          js_render: { type: "boolean", description: "Execute JavaScript (default true)." },
+          premium_proxy: { type: "boolean", description: "Use residential/premium proxies for tough anti-bot sites (default true)." },
+          country: { type: "string", description: "Optional 2-letter country code for proxy geo (e.g. 'us', 'in')." },
+        },
+        required: ["url"],
       },
     },
   },
@@ -436,6 +456,69 @@ async function toolSteelBrowser(args: any, apiKey: string): Promise<{ text: stri
   }
 }
 
+async function toolStealthScrape(
+  args: any,
+  keys: { zenrows: string; scrapingbee: string; scraperapi: string },
+): Promise<string> {
+  const url = String(args.url ?? "");
+  if (!url) return "❌ url required.";
+  const jsRender = args.js_render !== false;
+  const premium = args.premium_proxy !== false;
+  const country = args.country ? String(args.country).toLowerCase() : "";
+  const requested = String(args.provider ?? "auto").toLowerCase();
+
+  const order = requested === "auto"
+    ? (["zenrows", "scrapingbee", "scraperapi"] as const)
+    : ([requested, "zenrows", "scrapingbee", "scraperapi"].filter((v, i, a) => a.indexOf(v) === i) as any);
+
+  const errors: string[] = [];
+  for (const provider of order) {
+    const key = (keys as any)[provider];
+    if (!key) { errors.push(`${provider}: no key`); continue; }
+    try {
+      let endpoint = "";
+      if (provider === "zenrows") {
+        const p = new URLSearchParams({ url, apikey: key });
+        if (jsRender) p.set("js_render", "true");
+        if (premium) p.set("premium_proxy", "true");
+        if (country) p.set("proxy_country", country);
+        endpoint = `https://api.zenrows.com/v1/?${p.toString()}`;
+      } else if (provider === "scrapingbee") {
+        const p = new URLSearchParams({ api_key: key, url });
+        p.set("render_js", jsRender ? "true" : "false");
+        if (premium) p.set("premium_proxy", "true");
+        if (country) p.set("country_code", country);
+        endpoint = `https://app.scrapingbee.com/api/v1/?${p.toString()}`;
+      } else if (provider === "scraperapi") {
+        const p = new URLSearchParams({ api_key: key, url });
+        if (jsRender) p.set("render", "true");
+        if (premium) p.set("premium", "true");
+        if (country) p.set("country_code", country);
+        endpoint = `https://api.scraperapi.com/?${p.toString()}`;
+      }
+      const r = await fetch(endpoint, { method: "GET" });
+      if (!r.ok) {
+        errors.push(`${provider}: ${r.status}`);
+        if ([401, 402, 403].includes(r.status)) continue;
+        continue;
+      }
+      const html = await r.text();
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const out = `✅ [${provider}] scraped ${url}\n\n${text.slice(0, 8000)}${text.length > 8000 ? "\n…[truncated]" : ""}`;
+      return out;
+    } catch (e) {
+      errors.push(`${provider}: ${(e as Error).message}`);
+    }
+  }
+  return `❌ Stealth scrape failed. Tried: ${errors.join(" | ")}. Add ZENROWS_API_KEY / SCRAPINGBEE_API_KEY / SCRAPERAPI_KEY secrets.`;
+}
+
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -451,6 +534,11 @@ serve(async (req) => {
     const GROQ_API_KEY = sanitizeGroq(Deno.env.get("GROQ_API_KEY"));
     const GITHUB_PAT = Deno.env.get("GITHUB_PAT")?.trim() ?? "";
     const STEEL_API_KEY = Deno.env.get("STEEL_API_KEY")?.trim() ?? "";
+    const STEALTH_KEYS = {
+      zenrows: Deno.env.get("ZENROWS_API_KEY")?.trim() ?? "",
+      scrapingbee: Deno.env.get("SCRAPINGBEE_API_KEY")?.trim() ?? "",
+      scraperapi: Deno.env.get("SCRAPERAPI_KEY")?.trim() ?? "",
+    };
 
     const initial = messages.map((m) => ({ role: m.role, content: buildContent(m) }));
     const convo: any[] = [{ role: "system", content: SYSTEM_PROMPT }, ...initial];
@@ -562,6 +650,9 @@ serve(async (req) => {
                 const out = await toolSteelBrowser(args, STEEL_API_KEY);
                 if (out.attachment) { sendAttachment(out.attachment); collectedAttachments.push(out.attachment); }
                 result = out.text;
+              } else if (name === "stealth_scrape") {
+                sendText(`\n\n🛡️ *Stealth scrape (${args.provider ?? "auto"}): ${args.url}*\n\n`);
+                result = await toolStealthScrape(args, STEALTH_KEYS);
               } else {
                 result = `Unknown tool: ${name}`;
               }
