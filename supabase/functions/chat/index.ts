@@ -557,6 +557,11 @@ serve(async (req) => {
               } else if (name === "github") {
                 sendText(`\n\n🐙 *GitHub: ${args.action}${args.repo ? ` on ${args.repo}` : ""}*\n\n`);
                 result = await toolGithub(args, GITHUB_PAT);
+              } else if (name === "steel_browser") {
+                sendText(`\n\n🌐 *Steel browser: ${args.action} ${args.url}*\n\n`);
+                const out = await toolSteelBrowser(args, STEEL_API_KEY);
+                if (out.attachment) { sendAttachment(out.attachment); collectedAttachments.push(out.attachment); }
+                result = out.text;
               } else {
                 result = `Unknown tool: ${name}`;
               }
