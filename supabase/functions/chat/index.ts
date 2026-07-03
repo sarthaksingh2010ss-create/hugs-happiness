@@ -235,6 +235,23 @@ const TOOLS = [
         },
         required: ["action", "url"],
       },
+  },
+  {
+    type: "function",
+    function: {
+      name: "stealth_scrape",
+      description: "Anti-bot / Cloudflare bypass scraper. Uses ZenRows, ScrapingBee, or ScraperAPI (residential proxies + stealth headless browser) to fetch pages that block normal requests. Use when fetch_url or steel_browser return a challenge / 403 / 503 / Cloudflare block. Returns rendered HTML + extracted text.",
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Full http(s) URL to scrape." },
+          provider: { type: "string", enum: ["zenrows", "scrapingbee", "scraperapi", "auto"], description: "Which provider (default 'auto' — tries whichever key is configured)." },
+          js_render: { type: "boolean", description: "Execute JavaScript (default true)." },
+          premium_proxy: { type: "boolean", description: "Use residential/premium proxies for tough anti-bot sites (default true)." },
+          country: { type: "string", description: "Optional 2-letter country code for proxy geo (e.g. 'us', 'in')." },
+        },
+        required: ["url"],
+      },
     },
   },
 ];
