@@ -1,4 +1,4 @@
-import { Sparkles, Code, PenLine, Lightbulb, Globe } from "lucide-react";
+import { Sparkles, Code, TrendingUp, Bell, Newspaper, LineChart } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface EmptyChatProps {
@@ -6,10 +6,10 @@ interface EmptyChatProps {
 }
 
 const suggestions = [
-  { icon: Code, text: "Help me debug my code", color: "text-blue-400" },
-  { icon: PenLine, text: "Write a creative story", color: "text-pink-400" },
-  { icon: Lightbulb, text: "Explain quantum physics", color: "text-amber-400" },
-  { icon: Globe, text: "Translate to Hindi", color: "text-emerald-400" },
+  { icon: TrendingUp, text: "BTC/ETH live trading signal do", color: "text-emerald-400" },
+  { icon: LineChart, text: "Paper trade setup banao", color: "text-blue-400" },
+  { icon: Bell, text: "Crypto watchlist aur alerts plan karo", color: "text-amber-400" },
+  { icon: Newspaper, text: "Market news ka impact batao", color: "text-pink-400" },
 ];
 
 export default function EmptyChat({ onSuggestion }: EmptyChatProps) {
@@ -44,7 +44,7 @@ export default function EmptyChat({ onSuggestion }: EmptyChatProps) {
         transition={{ delay: 0.25 }}
         className="text-muted-foreground text-sm mb-10 text-center max-w-sm"
       >
-        How can I help you today? Ask me anything or pick a suggestion.
+        Trading analysis, paper trades, alerts aur market research ke liye ready.
       </motion.p>
 
       <motion.div
