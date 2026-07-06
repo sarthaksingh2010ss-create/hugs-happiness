@@ -75,12 +75,16 @@ const SYSTEM_PROMPT = `You are JSR AI — a powerful AUTONOMOUS AI agent built b
 YOU ARE AUTONOMOUS. You can decide on your own to:
 - 🔍 Search the live web (web_search tool)
 - 🌐 Fetch any public URL and read its content (fetch_url tool)
+- 📈 Check live crypto market data (crypto_market tool)
+- 🧾 Open/update simulated paper trades only (paper_trade tool)
 - 🎨 Generate images on demand (generate_image tool)
 - 📄 Create downloadable files on demand (generate_file tool)
 - 🧠 Chain multiple tool calls in one turn to research, verify, and answer deeply.
 
 WHEN TO USE TOOLS (be proactive — don't ask permission):
 - User asks about news, current events, prices, scores, weather → web_search
+- User asks about crypto/trading/coins/market signals → crypto_market + web_search when news/context matters
+- User asks you to trade, run a bot, enter/exit, or manage positions → paper_trade only; never execute real orders
 - User shares/mentions a URL or asks "what's on this page" → fetch_url
 - User asks for a picture/photo/image/diagram → generate_image
 - User asks for a downloadable file/script/config → generate_file
@@ -91,6 +95,15 @@ ABOUT YOU:
 - Frontend: React 18 + TS + Vite + Tailwind + Framer Motion. Backend: Lovable Cloud.
 - You can SEE images and READ text files the user attaches.
 - Speak Hindi, Hinglish, English — match user's language.
+
+📈 TRADING AGENT MODE — SAFE BY DESIGN:
+- You are now JSR AI Trading Agent for Sarthak: market research, signal analysis, watchlists, paper trades, position sizing math, stop-loss/take-profit planning, journaling, and risk warnings.
+- You MUST NOT request, store, reveal, or use wallet seed phrases, private keys, MetaMask secret recovery phrases, exchange API secrets, or any credential that can move funds.
+- You MUST NOT place real orders, emit browser-automation plans that click buy/sell buttons, connect wallets, bypass exchange protections, or promise/guarantee profit.
+- For every trade-like answer, use paper trading unless the user is only asking for education/analysis. Clearly label entries as PAPER TRADE / SIMULATION.
+- Default risk discipline: max 1% simulated account risk per trade, define invalidation, stop-loss, take-profit, position size formula, and conditions to avoid trading.
+- Be practical and direct in Hinglish when Sarthak is urgent: “real paisa auto-trade nahi, paper/live analysis safe mode mein kar raha hoon.”
+- If asked for 24/7 trading, explain you can run on each chat request and prepare monitoring/alert logic, but you cannot safely execute real-money autonomous trades.
 
 LONG-TERM MEMORY WITH SARTHAK:
 - Sarthak Singh built you on Lovable; you are JSR AI.
@@ -221,6 +234,7 @@ const TOOLS = [
         required: ["action"],
       },
     },
+  },
   {
     type: "function",
     function: {
@@ -235,6 +249,7 @@ const TOOLS = [
         },
         required: ["action", "url"],
       },
+    },
   },
   {
     type: "function",
@@ -251,6 +266,41 @@ const TOOLS = [
           country: { type: "string", description: "Optional 2-letter country code for proxy geo (e.g. 'us', 'in')." },
         },
         required: ["url"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "crypto_market",
+      description: "Get live crypto market data for symbols like BTC, ETH, SOL. Use for trading analysis, signals, watchlists, and paper trade setup.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbols: { type: "string", description: "Comma-separated crypto symbols, e.g. BTC,ETH,SOL. Default BTC,ETH,SOL." },
+          vs_currency: { type: "string", description: "Quote currency like usd or inr. Default usd." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "paper_trade",
+      description: "Create a simulated paper trade plan only. Never executes real trades or moves funds.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: { type: "string", description: "Asset symbol, e.g. BTC or ETH." },
+          side: { type: "string", enum: ["long", "short"], description: "Paper trade direction." },
+          entry: { type: "number", description: "Planned entry price." },
+          stop_loss: { type: "number", description: "Invalidation/stop price." },
+          take_profit: { type: "number", description: "Target price." },
+          account_size: { type: "number", description: "Simulated account size in quote currency." },
+          risk_percent: { type: "number", description: "Simulated risk percent. Default 1." },
+          rationale: { type: "string", description: "Compact reason for this simulated trade." },
+        },
+        required: ["symbol", "side", "entry", "stop_loss", "take_profit"],
       },
     },
   },
@@ -518,6 +568,114 @@ async function toolStealthScrape(
   return `❌ Stealth scrape failed. Tried: ${errors.join(" | ")}. Add ZENROWS_API_KEY / SCRAPINGBEE_API_KEY / SCRAPERAPI_KEY secrets.`;
 }
 
+const COINGECKO_IDS: Record<string, string> = {
+  btc: "bitcoin",
+  bitcoin: "bitcoin",
+  eth: "ethereum",
+  ethereum: "ethereum",
+  sol: "solana",
+  solana: "solana",
+  bnb: "binancecoin",
+  xrp: "ripple",
+  ada: "cardano",
+  doge: "dogecoin",
+  avax: "avalanche-2",
+  link: "chainlink",
+  dot: "polkadot",
+  matic: "matic-network",
+  polygon: "matic-network",
+  trx: "tron",
+  ton: "the-open-network",
+  pepe: "pepe",
+  shib: "shiba-inu",
+};
+
+async function toolCryptoMarket(args: any): Promise<string> {
+  const rawSymbols = String(args.symbols || "BTC,ETH,SOL");
+  const vs = String(args.vs_currency || "usd").toLowerCase().replace(/[^a-z]/g, "") || "usd";
+  const symbols = rawSymbols
+    .split(/[,.\s]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 8);
+  const ids = symbols.map((s) => COINGECKO_IDS[s] || s).filter(Boolean);
+  if (ids.length === 0) return "❌ No symbols provided.";
+
+  try {
+    const params = new URLSearchParams({
+      ids: ids.join(","),
+      vs_currencies: vs,
+      include_market_cap: "true",
+      include_24hr_vol: "true",
+      include_24hr_change: "true",
+      include_last_updated_at: "true",
+    });
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?${params.toString()}`, {
+      headers: { "accept": "application/json", "User-Agent": "JSR-AI-Trading-Agent/1.0" },
+    });
+    if (!r.ok) return `❌ Market data failed: ${r.status}`;
+    const data = await r.json();
+    const rows = ids.map((id, i) => {
+      const d = data[id] || {};
+      const price = d[vs];
+      const change = d[`${vs}_24h_change`];
+      const vol = d[`${vs}_24h_vol`];
+      const cap = d[`${vs}_market_cap`];
+      const updated = d.last_updated_at ? new Date(d.last_updated_at * 1000).toISOString() : "unknown";
+      return {
+        requested_symbol: symbols[i]?.toUpperCase(),
+        coingecko_id: id,
+        price,
+        change_24h_percent: typeof change === "number" ? Number(change.toFixed(2)) : null,
+        volume_24h: typeof vol === "number" ? Math.round(vol) : null,
+        market_cap: typeof cap === "number" ? Math.round(cap) : null,
+        last_updated: updated,
+      };
+    });
+    return JSON.stringify({ quote: vs.toUpperCase(), rows, note: "Live market snapshot for analysis/paper trading only; not financial advice." });
+  } catch (e) {
+    return `❌ Market data error: ${(e as Error).message}`;
+  }
+}
+
+function toolPaperTrade(args: any): string {
+  const symbol = String(args.symbol || "ASSET").toUpperCase();
+  const side = String(args.side || "long").toLowerCase() === "short" ? "short" : "long";
+  const entry = Number(args.entry);
+  const stop = Number(args.stop_loss);
+  const target = Number(args.take_profit);
+  const account = Number(args.account_size) > 0 ? Number(args.account_size) : 10000;
+  const riskPct = Math.min(Math.max(Number(args.risk_percent) || 1, 0.1), 1);
+  if (![entry, stop, target].every((n) => Number.isFinite(n) && n > 0)) return "❌ Invalid paper trade prices.";
+
+  const riskPerUnit = Math.abs(entry - stop);
+  const rewardPerUnit = Math.abs(target - entry);
+  if (riskPerUnit === 0) return "❌ Stop-loss cannot equal entry.";
+  const riskAmount = account * (riskPct / 100);
+  const quantity = riskAmount / riskPerUnit;
+  const notional = quantity * entry;
+  const rr = rewardPerUnit / riskPerUnit;
+  const validDirection = side === "long" ? stop < entry && target > entry : stop > entry && target < entry;
+
+  return JSON.stringify({
+    type: "PAPER_TRADE_SIMULATION_ONLY",
+    symbol,
+    side,
+    entry,
+    stop_loss: stop,
+    take_profit: target,
+    simulated_account_size: account,
+    risk_percent: riskPct,
+    max_simulated_loss: Number(riskAmount.toFixed(2)),
+    estimated_quantity: Number(quantity.toFixed(6)),
+    estimated_notional: Number(notional.toFixed(2)),
+    risk_reward_ratio: Number(rr.toFixed(2)),
+    direction_check: validDirection ? "ok" : "warning: stop/target direction does not match side",
+    rationale: String(args.rationale || "No rationale provided."),
+    safety: "No real order executed. No wallet/API/private key used. Educational paper trade only.",
+  });
+}
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -653,6 +811,12 @@ serve(async (req) => {
               } else if (name === "stealth_scrape") {
                 sendText(`\n\n🛡️ *Stealth scrape (${args.provider ?? "auto"}): ${args.url}*\n\n`);
                 result = await toolStealthScrape(args, STEALTH_KEYS);
+              } else if (name === "crypto_market") {
+                sendText(`\n\n📈 *Checking live crypto market: ${args.symbols ?? "BTC,ETH,SOL"}*\n\n`);
+                result = await toolCryptoMarket(args);
+              } else if (name === "paper_trade") {
+                sendText(`\n\n🧾 *Creating paper trade simulation for ${args.symbol ?? "asset"}*\n\n`);
+                result = toolPaperTrade(args);
               } else {
                 result = `Unknown tool: ${name}`;
               }
