@@ -1,4 +1,4 @@
-import { Sparkles, Code, TrendingUp, Bell, Newspaper, LineChart } from "lucide-react";
+import { Sparkles, TrendingUp, Bell, Newspaper, LineChart } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface EmptyChatProps {
