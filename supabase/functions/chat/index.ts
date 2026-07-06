@@ -234,6 +234,7 @@ const TOOLS = [
         required: ["action"],
       },
     },
+  },
   {
     type: "function",
     function: {
@@ -248,6 +249,7 @@ const TOOLS = [
         },
         required: ["action", "url"],
       },
+    },
   },
   {
     type: "function",
