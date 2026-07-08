@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Menu } from "lucide-react";
+import InstallPWA from "@/components/InstallPWA";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatMessage from "@/components/ChatMessage";
 import ChatInput from "@/components/ChatInput";
@@ -230,9 +231,10 @@ export default function Index() {
           >
             <Menu size={18} className="text-muted-foreground" aria-hidden="true" />
           </button>
-          <h2 className="text-sm font-heading font-medium text-foreground truncate">
+          <h2 className="text-sm font-heading font-medium text-foreground truncate flex-1">
             {activeConvo?.title ?? "JSR AI"}
           </h2>
+          <InstallPWA />
         </header>
 
         {activeConvo && activeConvo.messages.length > 0 ? (
