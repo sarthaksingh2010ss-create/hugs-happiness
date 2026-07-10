@@ -306,16 +306,19 @@ const TOOLS = [
   },
 ];
 
-const GH_API = "https://api.github.com";
-async function ghFetch(token: string, path: string, init: RequestInit = {}) {
-  const url = path.startsWith("http") ? path : `${GH_API}${path.startsWith("/") ? path : "/" + path}`;
+const GH_GATEWAY = "https://connector-gateway.lovable.dev/github";
+async function ghFetch(_token: string, path: string, init: RequestInit = {}) {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") ?? "";
+  const GITHUB_API_KEY = Deno.env.get("GITHUB_API_KEY") ?? "";
+  const rel = path.startsWith("http") ? path.replace(/^https?:\/\/api\.github\.com/, "") : path;
+  const url = `${GH_GATEWAY}${rel.startsWith("/") ? rel : "/" + rel}`;
   const r = await fetch(url, {
     ...init,
     headers: {
-      "Authorization": `Bearer ${token}`,
+      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+      "X-Connection-Api-Key": GITHUB_API_KEY,
       "Accept": "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "JSR-AI-Agent",
       "Content-Type": "application/json",
       ...(init.headers || {}),
     },
@@ -326,8 +329,11 @@ async function ghFetch(token: string, path: string, init: RequestInit = {}) {
   return { ok: r.ok, status: r.status, data };
 }
 
-async function toolGithub(args: any, token: string): Promise<string> {
-  if (!token) return "❌ GITHUB_PAT secret missing.";
+async function toolGithub(args: any, _token: string): Promise<string> {
+  const ready = !!Deno.env.get("GITHUB_API_KEY") && !!Deno.env.get("LOVABLE_API_KEY");
+  if (!ready) return "❌ GitHub connector not linked. Connect GitHub in Lovable connectors.";
+  const token = "";
+
   const a = args.action as string;
   const repo = args.repo as string | undefined;
   const split = () => {
