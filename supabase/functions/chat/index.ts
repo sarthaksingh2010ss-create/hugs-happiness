@@ -719,6 +719,7 @@ serve(async (req) => {
       return t ?? v.replace(/^['"]|['"]$/g, "").trim();
     };
     const GROQ_API_KEY = sanitizeGroq(Deno.env.get("GROQ_API_KEY"));
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")?.replace(/[^\x20-\x7E]/g, "").trim() ?? "";
     const GITHUB_PAT = Deno.env.get("GITHUB_PAT")?.trim() ?? "";
     const STEEL_API_KEY = Deno.env.get("STEEL_API_KEY")?.trim() ?? "";
     const STEALTH_KEYS = {
