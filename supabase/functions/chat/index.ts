@@ -108,14 +108,14 @@ ABOUT YOU:
 LONG-TERM MEMORY WITH SARTHAK:
 - Sarthak Singh built you on Lovable; you are JSR AI.
 - He added voice call, image/file attachments, file generation, image generation, web search, and now full autonomous agent capabilities.
-- Old localStorage chats may be lost; rely on this memory and continue the relationship.
+- Har request mein poori old chat history bheji jaati hai (localStorage se) — matlab purane conversations mein jo bhi hua (voice call, GitHub connect, image gen, file gen, jsr-plan, paper trades, sab pichli baaten) sab tumhe iss turn mein visible hai. Continuity maintain karo, "yaad hai" bolo jab Sarthak past reference kare.
 - He uses Hinglish often. Be warm, witty, helpful.
 
 🐙 GITHUB FULL ACCESS (via Lovable connector gateway — no PAT needed):
 Sarthak ne GitHub connector link kar diya hai. Tumhare paas \`github\` tool ke through uske GitHub par FULL access hai: list/create/delete/fork/star repos, read/write/delete files (auto-commits!), branches, PRs, issues, comments, code search, workflows run, releases — sab. Requests Lovable gateway se route hoti hain, credentials safe hain. Use PROACTIVELY jab bhi Sarthak GitHub, repo, code, commit, PR, issue, "push this", "create repo", "edit file in repo X" bole. Chain multiple calls. Destructive actions (delete_repo, delete_file, merge_pr, close_*) se pehle confirm karo jab tak Sarthak ne explicit na bola ho.
 
 🧰 FULL INVENTORY — TUMHARE PAAS ABHI YE SAB HAI (jab user pooche "tumhare paas kya kya hai", ye poori list batao):
-1. 🧠 **Brain**: Google Gemini 3 Flash Preview (Lovable AI Gateway) + Groq Llama 3.3 70B fallback
+1. 🧠 **Brain**: Google Gemini 2.5 Flash (Sarthak ki apni direct Gemini API key se — PRIMARY, ab se yahi chalega) + Lovable AI Gateway (Gemini 3 Flash Preview) fallback + Groq Llama 3.3 70B second fallback
 2. 👁️ **Vision**: images dekh sakte ho (jpg/png/webp attach)
 3. 📄 **Text file reading**: txt/md/json/csv/code files padh sakte ho
 4. 🔍 **web_search** — live Google-style search
@@ -719,6 +719,7 @@ serve(async (req) => {
       return t ?? v.replace(/^['"]|['"]$/g, "").trim();
     };
     const GROQ_API_KEY = sanitizeGroq(Deno.env.get("GROQ_API_KEY"));
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")?.replace(/[^\x20-\x7E]/g, "").trim() ?? "";
     const GITHUB_PAT = Deno.env.get("GITHUB_PAT")?.trim() ?? "";
     const STEEL_API_KEY = Deno.env.get("STEEL_API_KEY")?.trim() ?? "";
     const STEALTH_KEYS = {
@@ -739,9 +740,26 @@ serve(async (req) => {
         const sendText = (t: string) => send({ choices: [{ delta: { content: t } }] });
         const sendAttachment = (a: Attachment) => send({ attachment: a });
 
+        let geminiFailed = !GEMINI_API_KEY;
         let usingFallback = !LOVABLE_API_KEY;
 
         const callModel = async (stream: boolean) => {
+          // Primary: Google Gemini direct (OpenAI-compat endpoint)
+          if (GEMINI_API_KEY && !geminiFailed) {
+            const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "gemini-2.5-flash",
+                messages: convo,
+                tools: TOOLS,
+                stream,
+              }),
+            });
+            if (r.ok) return r;
+            console.log("Gemini direct failed, status:", r.status);
+            geminiFailed = true;
+          }
           if (LOVABLE_API_KEY && !usingFallback) {
             const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
