@@ -760,7 +760,8 @@ serve(async (req) => {
         let usingFallback = !LOVABLE_API_KEY;
 
         const callModel = async (stream: boolean) => {
-          // Primary: Google Gemini direct (OpenAI-compat endpoint)
+          // PRIMARY & ONLY responder to Sarthak: Google Gemini.
+          // Llama is available ONLY as a worker via the delegate_to_llama tool — never as a responder.
           if (GEMINI_API_KEY && !geminiFailed) {
             const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
               method: "POST",
@@ -776,6 +777,7 @@ serve(async (req) => {
             console.log("Gemini direct failed, status:", r.status);
             geminiFailed = true;
           }
+          // Backup Gemini brain via Lovable AI Gateway (still Gemini — NOT Llama).
           if (LOVABLE_API_KEY && !usingFallback) {
             const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
@@ -788,38 +790,43 @@ serve(async (req) => {
               }),
             });
             if (r.ok) return r;
-            if ([401, 402, 403, 429].includes(r.status) && GROQ_API_KEY) {
-              console.log("Falling back to Groq, status:", r.status);
-              usingFallback = true;
-            } else {
-              return r;
-            }
-          }
-          if (GROQ_API_KEY) {
-            const flat = (c: unknown): string => {
-              if (typeof c === "string") return c;
-              if (Array.isArray(c)) return c.map((p: any) => p?.type === "text" ? p.text : p?.type === "image_url" ? "[image — vision unavailable on fallback]" : "").join("\n");
-              return String(c ?? "");
-            };
-            return await fetch("https://api.groq.com/openai/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: convo.map((m) => ({ ...m, content: flat(m.content) })),
-                tools: TOOLS,
-                stream,
-              }),
-            });
+            usingFallback = true;
+            return r;
           }
           return null;
         };
 
+        // Worker: Llama via Groq. Called ONLY when Gemini invokes delegate_to_llama.
+        const callLlamaWorker = async (task: string, context: string, maxTokens: number): Promise<string> => {
+          if (!GROQ_API_KEY) return "Llama worker unavailable: GROQ_API_KEY not configured.";
+          const workerMessages = [
+            { role: "system", content: "You are Llama 3.3 70B — a background worker for JSR AI. The user-facing brain is Gemini; Gemini has delegated a sub-task to you. Complete ONLY the task given. Respond concisely, in the requested format. Do not address the user directly." },
+            { role: "user", content: context ? `TASK:\n${task}\n\nCONTEXT:\n${context}` : `TASK:\n${task}` },
+          ];
+          try {
+            const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: workerMessages,
+                max_tokens: maxTokens,
+                stream: false,
+              }),
+            });
+            if (!r.ok) return `Llama worker error (status ${r.status}).`;
+            const j = await r.json();
+            return j.choices?.[0]?.message?.content ?? "Llama worker returned empty response.";
+          } catch (e) {
+            return `Llama worker exception: ${String(e)}`;
+          }
+        };
+
         try {
-          // Autonomous tool loop (max 6 steps)
+          // Autonomous tool loop (max 12 steps)
           for (let step = 0; step < 12; step++) {
             const resp = await callModel(false);
-            if (!resp) { sendText("Koi AI provider key configured nahi hai."); break; }
+            if (!resp) { sendText("Gemini brain configured nahi hai. GEMINI_API_KEY add karein."); break; }
             if (!resp.ok) {
               const t = await resp.text();
               console.error("provider err", resp.status, t);
@@ -829,6 +836,7 @@ serve(async (req) => {
             const j = await resp.json();
             const msg = j.choices?.[0]?.message;
             if (!msg) { sendText("Empty AI response."); break; }
+
 
             const toolCalls = msg.tool_calls;
             if (!toolCalls || toolCalls.length === 0) {
