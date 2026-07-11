@@ -740,9 +740,26 @@ serve(async (req) => {
         const sendText = (t: string) => send({ choices: [{ delta: { content: t } }] });
         const sendAttachment = (a: Attachment) => send({ attachment: a });
 
+        let geminiFailed = !GEMINI_API_KEY;
         let usingFallback = !LOVABLE_API_KEY;
 
         const callModel = async (stream: boolean) => {
+          // Primary: Google Gemini direct (OpenAI-compat endpoint)
+          if (GEMINI_API_KEY && !geminiFailed) {
+            const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "gemini-2.5-flash",
+                messages: convo,
+                tools: TOOLS,
+                stream,
+              }),
+            });
+            if (r.ok) return r;
+            console.log("Gemini direct failed, status:", r.status);
+            geminiFailed = true;
+          }
           if (LOVABLE_API_KEY && !usingFallback) {
             const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
