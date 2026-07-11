@@ -91,7 +91,7 @@ WHEN TO USE TOOLS (be proactive — don't ask permission):
 - For research, multi-step questions, comparisons → search → fetch top results → synthesize.
 
 ABOUT YOU:
-- Brain: Google Gemini 3 Flash Preview via Lovable AI Gateway (Groq Llama 3.3 70B fallback).
+- Brain (SOLE responder): Google Gemini 2.5 Flash — Sarthak se hamesha TUM (Gemini) hi baat karte ho, tum hi jawab dete ho. Llama 3.3 70B ek background WORKER hai jise TUM \`delegate_to_llama\` tool se sub-tasks assign kar sakte ho (long drafts, brainstorming, heavy summarization, boilerplate). Llama ka output tumhare paas aata hai — Sarthak ko final jawab tum hi apni voice mein dete ho. Llama kabhi bhi user ko directly reply nahi karta.
 - Frontend: React 18 + TS + Vite + Tailwind + Framer Motion. Backend: Lovable Cloud.
 - You can SEE images and READ text files the user attaches.
 - Speak Hindi, Hinglish, English — match user's language.
@@ -115,7 +115,8 @@ LONG-TERM MEMORY WITH SARTHAK:
 Sarthak ne GitHub connector link kar diya hai. Tumhare paas \`github\` tool ke through uske GitHub par FULL access hai: list/create/delete/fork/star repos, read/write/delete files (auto-commits!), branches, PRs, issues, comments, code search, workflows run, releases — sab. Requests Lovable gateway se route hoti hain, credentials safe hain. Use PROACTIVELY jab bhi Sarthak GitHub, repo, code, commit, PR, issue, "push this", "create repo", "edit file in repo X" bole. Chain multiple calls. Destructive actions (delete_repo, delete_file, merge_pr, close_*) se pehle confirm karo jab tak Sarthak ne explicit na bola ho.
 
 🧰 FULL INVENTORY — TUMHARE PAAS ABHI YE SAB HAI (jab user pooche "tumhare paas kya kya hai", ye poori list batao):
-1. 🧠 **Brain**: Google Gemini 2.5 Flash (Sarthak ki apni direct Gemini API key se — PRIMARY, ab se yahi chalega) + Lovable AI Gateway (Gemini 3 Flash Preview) fallback + Groq Llama 3.3 70B second fallback
+1. 🧠 **Brain (sole responder)**: Google Gemini 2.5 Flash (Sarthak ki direct API key) — Sarthak ka order sirf Gemini leta hai aur Gemini hi jawab deta hai. Backup Gemini brain: Lovable AI Gateway (Gemini 3 Flash Preview) agar direct Gemini down ho.
+1b. 🤝 **Llama 3.3 70B worker** via \`delegate_to_llama\` tool — background helper jise Gemini sub-tasks deta hai (long draft, brainstorm, bulk summary, boilerplate code). Llama user se seedha baat NAHI karta; uska output Gemini use karke final jawab banata hai. Matlab har kaam Gemini + Llama milke karte hain, par Sarthak ke saamne sirf Gemini bolta hai.
 2. 👁️ **Vision**: images dekh sakte ho (jpg/png/webp attach)
 3. 📄 **Text file reading**: txt/md/json/csv/code files padh sakte ho
 4. 🔍 **web_search** — live Google-style search
@@ -324,6 +325,22 @@ const TOOLS = [
           rationale: { type: "string", description: "Compact reason for this simulated trade." },
         },
         required: ["symbol", "side", "entry", "stop_loss", "take_profit"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delegate_to_llama",
+      description: "Hand off a sub-task to the Llama 3.3 70B worker (Groq). Use this when you (Gemini, the sole responder to Sarthak) want a second brain to draft long text, brainstorm, summarize a big blob, write boilerplate code, translate, or do heavy parallel thinking. Llama NEVER talks to the user directly — only returns its result to you, and you decide how to use it in your final answer to Sarthak.",
+      parameters: {
+        type: "object",
+        properties: {
+          task: { type: "string", description: "Precise instruction for Llama in English or Hinglish. Be specific about format and length." },
+          context: { type: "string", description: "Optional extra context/data Llama needs to complete the task." },
+          max_tokens: { type: "number", description: "Optional cap on Llama's response length. Default 1200." },
+        },
+        required: ["task"],
       },
     },
   },
@@ -744,7 +761,8 @@ serve(async (req) => {
         let usingFallback = !LOVABLE_API_KEY;
 
         const callModel = async (stream: boolean) => {
-          // Primary: Google Gemini direct (OpenAI-compat endpoint)
+          // PRIMARY & ONLY responder to Sarthak: Google Gemini.
+          // Llama is available ONLY as a worker via the delegate_to_llama tool — never as a responder.
           if (GEMINI_API_KEY && !geminiFailed) {
             const r = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
               method: "POST",
@@ -760,6 +778,7 @@ serve(async (req) => {
             console.log("Gemini direct failed, status:", r.status);
             geminiFailed = true;
           }
+          // Backup Gemini brain via Lovable AI Gateway (still Gemini — NOT Llama).
           if (LOVABLE_API_KEY && !usingFallback) {
             const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
@@ -772,38 +791,43 @@ serve(async (req) => {
               }),
             });
             if (r.ok) return r;
-            if ([401, 402, 403, 429].includes(r.status) && GROQ_API_KEY) {
-              console.log("Falling back to Groq, status:", r.status);
-              usingFallback = true;
-            } else {
-              return r;
-            }
-          }
-          if (GROQ_API_KEY) {
-            const flat = (c: unknown): string => {
-              if (typeof c === "string") return c;
-              if (Array.isArray(c)) return c.map((p: any) => p?.type === "text" ? p.text : p?.type === "image_url" ? "[image — vision unavailable on fallback]" : "").join("\n");
-              return String(c ?? "");
-            };
-            return await fetch("https://api.groq.com/openai/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
-                messages: convo.map((m) => ({ ...m, content: flat(m.content) })),
-                tools: TOOLS,
-                stream,
-              }),
-            });
+            usingFallback = true;
+            return r;
           }
           return null;
         };
 
+        // Worker: Llama via Groq. Called ONLY when Gemini invokes delegate_to_llama.
+        const callLlamaWorker = async (task: string, context: string, maxTokens: number): Promise<string> => {
+          if (!GROQ_API_KEY) return "Llama worker unavailable: GROQ_API_KEY not configured.";
+          const workerMessages = [
+            { role: "system", content: "You are Llama 3.3 70B — a background worker for JSR AI. The user-facing brain is Gemini; Gemini has delegated a sub-task to you. Complete ONLY the task given. Respond concisely, in the requested format. Do not address the user directly." },
+            { role: "user", content: context ? `TASK:\n${task}\n\nCONTEXT:\n${context}` : `TASK:\n${task}` },
+          ];
+          try {
+            const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: workerMessages,
+                max_tokens: maxTokens,
+                stream: false,
+              }),
+            });
+            if (!r.ok) return `Llama worker error (status ${r.status}).`;
+            const j = await r.json();
+            return j.choices?.[0]?.message?.content ?? "Llama worker returned empty response.";
+          } catch (e) {
+            return `Llama worker exception: ${String(e)}`;
+          }
+        };
+
         try {
-          // Autonomous tool loop (max 6 steps)
+          // Autonomous tool loop (max 12 steps)
           for (let step = 0; step < 12; step++) {
             const resp = await callModel(false);
-            if (!resp) { sendText("Koi AI provider key configured nahi hai."); break; }
+            if (!resp) { sendText("Gemini brain configured nahi hai. GEMINI_API_KEY add karein."); break; }
             if (!resp.ok) {
               const t = await resp.text();
               console.error("provider err", resp.status, t);
@@ -813,6 +837,7 @@ serve(async (req) => {
             const j = await resp.json();
             const msg = j.choices?.[0]?.message;
             if (!msg) { sendText("Empty AI response."); break; }
+
 
             const toolCalls = msg.tool_calls;
             if (!toolCalls || toolCalls.length === 0) {
@@ -864,6 +889,14 @@ serve(async (req) => {
               } else if (name === "paper_trade") {
                 sendText(`\n\n🧾 *Creating paper trade simulation for ${args.symbol ?? "asset"}*\n\n`);
                 result = toolPaperTrade(args);
+              } else if (name === "delegate_to_llama") {
+                const taskPreview = String(args.task ?? "").slice(0, 80);
+                sendText(`\n\n🤝 *Llama worker ko delegate kiya: ${taskPreview}${taskPreview.length >= 80 ? "…" : ""}*\n\n`);
+                result = await callLlamaWorker(
+                  String(args.task ?? ""),
+                  String(args.context ?? ""),
+                  Number(args.max_tokens) || 1200,
+                );
               } else {
                 result = `Unknown tool: ${name}`;
               }
