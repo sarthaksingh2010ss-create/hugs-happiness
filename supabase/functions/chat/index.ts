@@ -888,6 +888,14 @@ serve(async (req) => {
               } else if (name === "paper_trade") {
                 sendText(`\n\n🧾 *Creating paper trade simulation for ${args.symbol ?? "asset"}*\n\n`);
                 result = toolPaperTrade(args);
+              } else if (name === "delegate_to_llama") {
+                const taskPreview = String(args.task ?? "").slice(0, 80);
+                sendText(`\n\n🤝 *Llama worker ko delegate kiya: ${taskPreview}${taskPreview.length >= 80 ? "…" : ""}*\n\n`);
+                result = await callLlamaWorker(
+                  String(args.task ?? ""),
+                  String(args.context ?? ""),
+                  Number(args.max_tokens) || 1200,
+                );
               } else {
                 result = `Unknown tool: ${name}`;
               }
