@@ -327,6 +327,22 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "delegate_to_llama",
+      description: "Hand off a sub-task to the Llama 3.3 70B worker (Groq). Use this when you (Gemini, the sole responder to Sarthak) want a second brain to draft long text, brainstorm, summarize a big blob, write boilerplate code, translate, or do heavy parallel thinking. Llama NEVER talks to the user directly — only returns its result to you, and you decide how to use it in your final answer to Sarthak.",
+      parameters: {
+        type: "object",
+        properties: {
+          task: { type: "string", description: "Precise instruction for Llama in English or Hinglish. Be specific about format and length." },
+          context: { type: "string", description: "Optional extra context/data Llama needs to complete the task." },
+          max_tokens: { type: "number", description: "Optional cap on Llama's response length. Default 1200." },
+        },
+        required: ["task"],
+      },
+    },
+  },
 ];
 
 const GH_GATEWAY = "https://connector-gateway.lovable.dev/github";
